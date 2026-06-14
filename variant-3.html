@@ -274,6 +274,42 @@ header#topbar{
   #leftrail{flex-basis:0; display:none;}
   #legend{font-size:8px;}
 }
+
+/* ====================== PHONE LAYOUT (added) ====================== */
+@media (max-width:760px){
+  #topbar{flex-wrap:wrap; gap:4px 12px; padding:8px 12px;}
+  #title{font-size:16px;}
+  #subtitle{font-size:9.5px; order:3; flex-basis:100%;}
+  #topbar .meta{display:none;}
+  #topbar .spacer{display:none;}
+
+  /* build log becomes an off-canvas drawer, toggled by the ≡ LOG button */
+  #leftrail{display:flex !important; position:fixed; top:0; bottom:0; left:0;
+    width:86%; max-width:340px; flex-basis:auto; z-index:120;
+    transform:translateX(-103%); transition:transform .25s ease;
+    box-shadow:8px 0 26px rgba(0,0,0,.55);}
+  body.log-open #leftrail{transform:none;}
+
+  #stage{min-width:0;}
+  #legend{top:10px; right:10px;}
+  #lineage{font-size:9px;}
+
+  /* transport: single-row horizontal scroll */
+  #transport{flex-wrap:nowrap; overflow-x:auto; gap:10px; padding:8px 10px;}
+  #transport::-webkit-scrollbar{display:none;}
+  #transport > *{flex:0 0 auto;}
+  #transport .grow,#timeWrap{min-width:170px;}
+
+  #bootbox{transform:scale(.92);}
+  #helpToggle{display:none;}
+}
+/* mobile build-log toggle button (hidden on desktop) */
+#m-logtoggle{display:none;}
+@media (max-width:760px){
+  #m-logtoggle{display:block; position:fixed; left:10px; top:50px; z-index:121;
+    font-family:inherit; font-size:9.5px; letter-spacing:1px; color:var(--accent);
+    background:rgba(8,14,11,.86); border:1px solid var(--accent); padding:7px 11px; cursor:pointer;}
+}
 </style>
 </head>
 <body>
@@ -1563,6 +1599,38 @@ init();
 
 /* update legend counts each second-ish via render side-effect */
 setInterval(()=>{ updateLegendCounts(); },400);
+</script>
+<script>
+/* ===== Mobile: touch navigation + build-log drawer. Additive; desktop untouched. ===== */
+(function(){
+  "use strict";
+  function simpleTouch(el, pinch){
+    if(!el) return;
+    el.style.touchAction='none';
+    var x0=0,y0=0,moved=false,pd=0,acc=0;
+    function fire(type,x,y){ el.dispatchEvent(new MouseEvent(type,{bubbles:true,cancelable:true,view:window,clientX:x,clientY:y,button:0})); }
+    el.addEventListener('touchstart',function(e){
+      if(e.touches.length===1){var t=e.touches[0];x0=t.clientX;y0=t.clientY;moved=false;pd=0;fire('mousedown',x0,y0);}
+      else if(pinch&&e.touches.length===2){var a=e.touches[0],b=e.touches[1];pd=Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY);acc=0;fire('mouseup',x0,y0);}
+      e.preventDefault();
+    },{passive:false});
+    el.addEventListener('touchmove',function(e){
+      if(e.touches.length===1&&pd===0){var t=e.touches[0];if(Math.abs(t.clientX-x0)>4||Math.abs(t.clientY-y0)>4)moved=true;fire('mousemove',t.clientX,t.clientY);}
+      else if(pinch&&e.touches.length===2){var a=e.touches[0],b=e.touches[1];var d=Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY);var mx=(a.clientX+b.clientX)/2,my=(a.clientY+b.clientY)/2;acc+=d-pd;pd=d;if(Math.abs(acc)>=8){el.dispatchEvent(new WheelEvent('wheel',{bubbles:true,cancelable:true,view:window,clientX:mx,clientY:my,deltaY:-(acc>0?1:-1)*50}));acc=0;}}
+      e.preventDefault();
+    },{passive:false});
+    el.addEventListener('touchend',function(e){
+      if(e.touches.length===0){fire('mouseup',x0,y0);if(!moved&&pd===0)fire('click',x0,y0);pd=0;}
+      else if(e.touches.length===1){pd=0;var t=e.touches[0];x0=t.clientX;y0=t.clientY;moved=true;fire('mousedown',x0,y0);}
+      e.preventDefault();
+    },{passive:false});
+  }
+  simpleTouch(document.getElementById('graph'), true);
+
+  var btn=document.createElement('button');btn.id='m-logtoggle';btn.type='button';btn.textContent='≡ LOG';
+  document.body.appendChild(btn);
+  btn.addEventListener('click',function(){ var o=document.body.classList.toggle('log-open'); btn.textContent=o?'✕ LOG':'≡ LOG'; });
+})();
 </script>
 </body>
 </html>

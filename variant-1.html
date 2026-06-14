@@ -210,6 +210,55 @@
     #buildlog{top:200px}
     #sources{top:380px}
   }
+
+  /* ====================== PHONE LAYOUT (added) ====================== */
+  @media (max-width:680px){
+    #header{top:6px;left:6px;right:64px;width:auto}
+    #header .pb{padding:8px 10px}
+    #header .title{font-size:17px;line-height:1.1}
+    #header .tag{font-size:10px;margin-top:4px}
+    #header .meta{display:none}
+
+    #infobtn{top:auto;bottom:116px;left:6px}
+
+    #narration{left:6px;right:6px;width:auto;bottom:100px}
+    #narration .pb{padding:8px 10px}
+    #narration .desc{font-size:11px;min-height:0}
+
+    #controls{left:6px;right:6px;bottom:6px;width:auto;transform:none}
+    #controls .pb{flex-wrap:nowrap;overflow-x:auto;gap:8px;padding:8px}
+    #controls .pb::-webkit-scrollbar{display:none}
+    #controls > .pb > *{flex:0 0 auto}
+    #controls .btn{padding:9px 11px;font-size:10px}
+    #timeline{min-width:210px}
+
+    #infopop{left:6px;right:6px;width:auto;top:60px}
+    #tip{display:none !important}
+
+    #dossier{left:6px;right:6px;width:auto;top:auto;bottom:100px;max-height:46vh;overflow:auto}
+
+    #standby .sttl{font-size:10px;letter-spacing:.22em;padding:0 14px}
+    #standby .bigbtn{font-size:12px;padding:14px 30px}
+    #standby .shint{font-size:8px;padding:0 18px;line-height:1.7}
+  }
+
+  /* Mobile DATA drawer — hidden on desktop, holds the dense secondary panels */
+  #m-toggle,#m-drawer{display:none}
+  @media (max-width:680px){
+    #m-toggle{display:flex;align-items:center;gap:6px;position:fixed;top:6px;right:6px;z-index:42;
+      font-family:var(--mono);font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);
+      background:var(--hud-bg);border:1px solid var(--accent);padding:8px 10px;cursor:pointer;
+      backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px)}
+    #m-toggle:active{background:rgba(255,214,107,.15)}
+    #m-drawer{display:flex;flex-direction:column;gap:8px;position:fixed;top:44px;left:6px;right:6px;
+      max-height:64vh;overflow-y:auto;z-index:41;padding:2px;
+      opacity:0;transform:translateY(-8px);pointer-events:none;transition:opacity .2s,transform .2s}
+    body.m-open #m-drawer{opacity:1;transform:none;pointer-events:auto}
+    #m-drawer .panel{display:block !important;position:static !important;
+      inset:auto !important;top:auto !important;left:auto !important;right:auto !important;bottom:auto !important;
+      width:auto !important;margin:0 !important}
+    #m-drawer #logfeed{height:130px}
+  }
 </style>
 </head>
 <body>
@@ -1693,6 +1742,55 @@ function init(){
   requestAnimationFrame(loop);
 }
 init();
+</script>
+<script>
+/* ===== Mobile enhancements (touch navigation + DATA drawer). Additive; desktop untouched. ===== */
+(function(){
+  "use strict";
+  var MQ='(max-width:680px)';
+
+  // Translate touch -> the mouse/wheel events the app already listens for.
+  function simpleTouch(el, pinch){
+    if(!el) return;
+    el.style.touchAction='none';
+    var x0=0,y0=0,moved=false,pd=0,acc=0;
+    function fire(type,x,y){ el.dispatchEvent(new MouseEvent(type,{bubbles:true,cancelable:true,view:window,clientX:x,clientY:y,button:0})); }
+    el.addEventListener('touchstart',function(e){
+      if(e.touches.length===1){var t=e.touches[0];x0=t.clientX;y0=t.clientY;moved=false;pd=0;fire('mousedown',x0,y0);}
+      else if(pinch&&e.touches.length===2){var a=e.touches[0],b=e.touches[1];pd=Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY);acc=0;fire('mouseup',x0,y0);}
+      e.preventDefault();
+    },{passive:false});
+    el.addEventListener('touchmove',function(e){
+      if(e.touches.length===1&&pd===0){var t=e.touches[0];if(Math.abs(t.clientX-x0)>4||Math.abs(t.clientY-y0)>4)moved=true;fire('mousemove',t.clientX,t.clientY);}
+      else if(pinch&&e.touches.length===2){var a=e.touches[0],b=e.touches[1];var d=Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY);var mx=(a.clientX+b.clientX)/2,my=(a.clientY+b.clientY)/2;acc+=d-pd;pd=d;if(Math.abs(acc)>=8){el.dispatchEvent(new WheelEvent('wheel',{bubbles:true,cancelable:true,view:window,clientX:mx,clientY:my,deltaY:-(acc>0?1:-1)*50}));acc=0;}}
+      e.preventDefault();
+    },{passive:false});
+    el.addEventListener('touchend',function(e){
+      if(e.touches.length===0){fire('mouseup',x0,y0);if(!moved&&pd===0)fire('click',x0,y0);pd=0;}
+      else if(e.touches.length===1){pd=0;var t=e.touches[0];x0=t.clientX;y0=t.clientY;moved=true;fire('mousedown',x0,y0);}
+      e.preventDefault();
+    },{passive:false});
+  }
+
+  simpleTouch(document.getElementById('gfx'), true);
+  simpleTouch(document.getElementById('scrub'), false);
+
+  // Tuck dense secondary panels into a one-tap drawer on phones.
+  var SECONDARY=['telemetry','buildlog','sources','legend'];
+  var drawer=document.createElement('div');drawer.id='m-drawer';
+  var toggle=document.createElement('button');toggle.id='m-toggle';toggle.type='button';toggle.textContent='▤ DATA';
+  document.body.appendChild(drawer);document.body.appendChild(toggle);
+  var homes={};SECONDARY.forEach(function(id){var el=document.getElementById(id);if(el)homes[id]={p:el.parentNode,n:el.nextSibling};});
+  function place(){
+    var phone=window.matchMedia(MQ).matches;
+    SECONDARY.forEach(function(id){var el=document.getElementById(id);if(!el)return;
+      if(phone){if(el.parentNode!==drawer)drawer.appendChild(el);}
+      else{var h=homes[id];if(h&&el.parentNode===drawer)h.p.insertBefore(el,h.n);}});
+    if(!phone)document.body.classList.remove('m-open');
+  }
+  toggle.addEventListener('click',function(){document.body.classList.toggle('m-open');});
+  place();window.addEventListener('resize',place);
+})();
 </script>
 </body>
 </html>
