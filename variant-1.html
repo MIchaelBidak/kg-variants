@@ -1,0 +1,1698 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ORBITAL // The Knowledge Assembly Observatory</title>
+<style>
+  /* ============================================================
+     ORBITAL — Knowledge Assembly Observatory
+     Self-contained. No external assets. Vanilla JS + Canvas2D.
+     ============================================================ */
+
+  /* ---- System monospace + geometric-sans fallback stacks ---- */
+  :root{
+    --bg:#04060D;
+    --surface:#0B1018;
+    --edge:#2A3550;
+    --accent:#FFD66B;
+    --text:#C7D2E0;
+    --dim:#5B6B82;
+    --hair:rgba(120,150,190,0.22);
+    --hud-bg:rgba(8,13,22,0.72);
+    --mono:"JetBrains Mono","IBM Plex Mono","SFMono-Regular",Menlo,Consolas,"Liberation Mono",monospace;
+    --sans:"Space Grotesk","Inter Tight","Inter","Segoe UI",system-ui,-apple-system,sans-serif;
+    --c-artist:#7DF9FF;
+    --c-genre:#FF5FA2;
+    --c-instr:#FFB347;
+    --c-city:#8B7BFF;
+    --c-label:#4AF2A1;
+    --c-source:#FFF4CF;
+    --c-bridge:#FFEFC2;
+  }
+
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;width:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:var(--mono)}
+  body{position:fixed;inset:0;-webkit-font-smoothing:antialiased}
+
+  #stage{position:absolute;inset:0;cursor:grab}
+  #stage.grabbing{cursor:grabbing}
+  canvas#gfx{position:absolute;inset:0;display:block}
+
+  /* Scanline + vignette overlay — pure CSS, sits above canvas, below HUD */
+  #overlay{position:absolute;inset:0;pointer-events:none;z-index:5;
+    background:
+      radial-gradient(ellipse 120% 90% at 50% 50%, rgba(0,0,0,0) 55%, rgba(0,0,0,0.55) 100%);
+    mix-blend-mode:normal;}
+  #overlay::before{content:"";position:absolute;inset:0;
+    background:repeating-linear-gradient(0deg, rgba(0,0,0,0) 0px, rgba(0,0,0,0) 2px, rgba(0,0,0,0.10) 3px, rgba(0,0,0,0) 4px);
+    opacity:0.5;}
+  #overlay::after{content:"";position:absolute;inset:0;
+    background:radial-gradient(circle at 50% 40%, rgba(60,90,140,0.05), rgba(0,0,0,0) 60%);}
+
+  /* ---------- Generic HUD panel framing ---------- */
+  .panel{position:absolute;z-index:10;background:var(--hud-bg);
+    border:1px solid var(--hair);
+    backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);
+    box-shadow:0 0 40px rgba(0,0,0,0.5), inset 0 0 0 1px rgba(255,255,255,0.015);
+  }
+  /* L-shaped corner brackets */
+  .panel .cnr{position:absolute;width:9px;height:9px;border-color:var(--accent);opacity:0.8;pointer-events:none}
+  .cnr.tl{top:-1px;left:-1px;border-top:1px solid;border-left:1px solid}
+  .cnr.tr{top:-1px;right:-1px;border-top:1px solid;border-right:1px solid}
+  .cnr.bl{bottom:-1px;left:-1px;border-bottom:1px solid;border-left:1px solid}
+  .cnr.br{bottom:-1px;right:-1px;border-bottom:1px solid;border-right:1px solid}
+
+  .ph{font-size:10px;letter-spacing:0.16em;text-transform:uppercase;color:var(--accent);
+    padding:7px 10px;border-bottom:1px solid var(--hair);display:flex;justify-content:space-between;align-items:center;
+    background:linear-gradient(180deg, rgba(255,214,107,0.06), rgba(255,214,107,0));}
+  .ph .dot{width:6px;height:6px;border-radius:50%;background:var(--accent);box-shadow:0 0 6px var(--accent);animation:blink 2s infinite}
+  @keyframes blink{0%,100%{opacity:1}50%{opacity:0.25}}
+  .pb{padding:9px 10px}
+
+  /* ---------- Header / title ---------- */
+  #header{top:14px;left:14px;width:392px;}
+  #header .title{font-family:var(--sans);font-size:25px;font-weight:700;letter-spacing:0.04em;color:#EAF1FA;line-height:1.05}
+  #header .title b{color:var(--accent);font-weight:700}
+  #header .tag{font-family:var(--sans);font-size:11.5px;color:var(--dim);margin-top:6px;line-height:1.4}
+  #header .meta{margin-top:9px;font-size:9px;letter-spacing:0.14em;color:var(--dim);text-transform:uppercase;display:flex;gap:14px}
+  #header .meta span b{color:var(--text)}
+
+  /* ---------- Telemetry tiles ---------- */
+  #telemetry{top:14px;right:14px;width:236px}
+  .tgrid{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--hair)}
+  .tile{background:var(--surface);padding:8px 10px}
+  .tile .k{font-size:8.5px;letter-spacing:0.13em;color:var(--dim);text-transform:uppercase}
+  .tile .v{font-size:19px;color:#EAF1FA;font-variant-numeric:tabular-nums;margin-top:2px;line-height:1}
+  .tile .v.sm{font-size:12px;color:var(--accent);letter-spacing:0.04em}
+  .tile.bridge .v{font-size:11px;letter-spacing:0.06em}
+  .tile.bridge.none .v{color:#FF6B6B}
+  .tile.bridge.active .v{color:#FFE08A}
+
+  /* ---------- Stage / narration ---------- */
+  #narration{left:14px;bottom:118px;width:392px}
+  #narration .stage{font-size:11px;letter-spacing:0.12em;color:var(--accent);text-transform:uppercase}
+  #narration .desc{font-family:var(--sans);font-size:12.5px;color:var(--text);line-height:1.5;margin-top:7px;min-height:54px}
+  #narration .prog{height:3px;background:rgba(255,255,255,0.06);margin-top:10px;position:relative;overflow:hidden}
+  #narration .prog i{position:absolute;left:0;top:0;bottom:0;width:0;background:linear-gradient(90deg,var(--accent),#7DF9FF);box-shadow:0 0 8px var(--accent)}
+
+  /* ---------- Build log ---------- */
+  #buildlog{right:14px;top:222px;width:236px;}
+  #buildlog .pb{height:172px;overflow:hidden;padding:0}
+  #logfeed{height:100%;overflow-y:auto;padding:6px 9px;font-size:10px;line-height:1.55;scrollbar-width:thin;scrollbar-color:var(--edge) transparent}
+  #logfeed::-webkit-scrollbar{width:5px}
+  #logfeed::-webkit-scrollbar-thumb{background:var(--edge)}
+  .logrow{display:flex;gap:6px;padding:2px 0;border-bottom:1px dotted rgba(120,150,190,0.08);animation:logIn .4s ease}
+  @keyframes logIn{from{opacity:0;transform:translateX(8px)}to{opacity:1;transform:none}}
+  .logrow .ts{color:var(--dim);flex:0 0 auto}
+  .logrow .msg{color:var(--text)}
+  .logrow .msg em{font-style:normal;color:var(--accent)}
+  .logrow.evt .msg em{color:#7DF9FF}
+  .logrow.bridge .msg{color:#FFE08A}
+  .logrow.bridge .msg em{color:#FFF4CF}
+
+  /* ---------- Source feed ---------- */
+  #sources{right:14px;top:412px;width:236px}
+  .srow{display:flex;align-items:center;gap:8px;padding:6px 4px;border-bottom:1px dotted rgba(120,150,190,0.1);cursor:pointer;transition:background .15s}
+  .srow:last-child{border-bottom:none}
+  .srow:hover{background:rgba(255,255,255,0.04)}
+  .srow.active{background:rgba(255,214,107,0.07)}
+  .srow.sel{box-shadow:inset 2px 0 0 var(--accent)}
+  .srow .sd{width:8px;height:8px;border-radius:50%;flex:0 0 auto;box-shadow:0 0 6px currentColor}
+  .srow .sn{font-size:10px;color:var(--text);line-height:1.25}
+  .srow .sn b{display:block;font-size:8px;color:var(--dim);letter-spacing:0.1em;text-transform:uppercase;margin-top:1px}
+  .srow.pending{opacity:0.4}
+
+  /* ---------- Legend ---------- */
+  #legend{left:14px;top:152px;width:172px}
+  .lrow{display:flex;align-items:center;gap:9px;padding:5px 4px;cursor:pointer;border-radius:2px;transition:opacity .15s,background .15s}
+  .lrow:hover{background:rgba(255,255,255,0.04)}
+  .lrow.off{opacity:0.34}
+  .lrow .ls{width:11px;height:11px;border-radius:50%;flex:0 0 auto;box-shadow:0 0 7px currentColor}
+  .lrow .ln{font-size:10.5px;letter-spacing:0.06em;flex:1}
+  .lrow .lc{font-size:9px;color:var(--dim);font-variant-numeric:tabular-nums}
+
+  /* ---------- Dossier ---------- */
+  #dossier{right:14px;bottom:118px;width:236px;display:none}
+  #dossier.show{display:block}
+  #dossier .dname{font-family:var(--sans);font-size:16px;color:#EAF1FA;font-weight:600;line-height:1.15}
+  #dossier .dtype{font-size:9px;letter-spacing:0.14em;text-transform:uppercase;margin-top:4px}
+  #dossier .ddesc{font-family:var(--sans);font-size:11.5px;color:var(--text);line-height:1.5;margin-top:8px}
+  #dossier .dmeta{margin-top:9px;font-size:9.5px;color:var(--dim);line-height:1.7}
+  #dossier .dmeta b{color:var(--text)}
+  #dossier .dconn{margin-top:8px;font-size:10px;line-height:1.5}
+  #dossier .dconn .ct{font-size:8.5px;letter-spacing:0.12em;color:var(--dim);text-transform:uppercase;margin-bottom:3px}
+  #dossier .dconn span{color:#7DF9FF}
+
+  /* ---------- Transport / controls bar ---------- */
+  #controls{left:50%;transform:translateX(-50%);bottom:14px;width:min(960px,calc(100vw - 28px));z-index:12}
+  #controls .pb{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  .btn{font-family:var(--mono);font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--text);
+    background:rgba(255,255,255,0.03);border:1px solid var(--hair);padding:7px 12px;cursor:pointer;transition:all .15s;white-space:nowrap}
+  .btn:hover{border-color:var(--accent);color:var(--accent);background:rgba(255,214,107,0.06)}
+  .btn.primary{border-color:var(--accent);color:var(--accent)}
+  .btn.primary:hover{background:var(--accent);color:#04060D}
+  .btn.on{background:rgba(125,249,255,0.12);border-color:#7DF9FF;color:#7DF9FF}
+  .seg{display:flex;border:1px solid var(--hair)}
+  .seg .btn{border:none;border-right:1px solid var(--hair);padding:7px 10px}
+  .seg .btn:last-child{border-right:none}
+  .seg .btn.sel{background:rgba(255,214,107,0.14);color:var(--accent)}
+  .ctl-lbl{font-size:8.5px;letter-spacing:0.14em;text-transform:uppercase;color:var(--dim)}
+
+  /* Timeline scrubber */
+  #timeline{flex:1;min-width:220px;display:flex;align-items:center;gap:10px}
+  #scrub{position:relative;flex:1;height:30px;cursor:pointer}
+  #scrubtrack{position:absolute;left:0;right:0;top:13px;height:3px;background:rgba(255,255,255,0.08)}
+  #scrubfill{position:absolute;left:0;top:13px;height:3px;background:linear-gradient(90deg,#FFB347,#FF5FA2,#7DF9FF);box-shadow:0 0 8px rgba(255,180,71,0.5)}
+  #scrubknob{position:absolute;top:8px;width:13px;height:13px;border-radius:50%;background:var(--accent);box-shadow:0 0 10px var(--accent);transform:translateX(-50%);transition:transform .05s}
+  .tick{position:absolute;top:6px;width:1px;height:18px;background:var(--hair)}
+  .ticklbl{position:absolute;top:24px;font-size:7.5px;color:var(--dim);transform:translateX(-50%);letter-spacing:0.06em;white-space:nowrap}
+  #yearread{font-size:13px;color:var(--accent);font-variant-numeric:tabular-nums;letter-spacing:0.04em;flex:0 0 auto;min-width:42px}
+
+  /* ---------- Begin / standby overlay ---------- */
+  #standby{position:absolute;inset:0;z-index:30;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    background:radial-gradient(circle at 50% 45%, rgba(8,15,28,0.55), rgba(4,6,13,0.9));text-align:center}
+  #standby.gone{display:none}
+  #standby .sttl{font-family:var(--sans);font-size:13px;letter-spacing:0.4em;color:var(--dim);text-transform:uppercase;margin-bottom:16px}
+  #standby .bigbtn{font-family:var(--mono);font-size:14px;letter-spacing:0.22em;text-transform:uppercase;color:#04060D;
+    background:var(--accent);border:none;padding:16px 40px;cursor:pointer;box-shadow:0 0 30px rgba(255,214,107,0.4);transition:transform .15s, box-shadow .15s}
+  #standby .bigbtn:hover{transform:scale(1.04);box-shadow:0 0 50px rgba(255,214,107,0.65)}
+  #standby .shint{font-size:9.5px;color:var(--dim);letter-spacing:0.16em;margin-top:18px;text-transform:uppercase}
+
+  /* ---------- "What is a KG" note ---------- */
+  #infobtn{position:absolute;z-index:12;left:14px;top:122px;font-size:9px;letter-spacing:0.12em;color:var(--dim);
+    text-transform:uppercase;cursor:pointer;border:1px solid var(--hair);padding:4px 8px;background:var(--hud-bg)}
+  #infobtn:hover{color:var(--accent);border-color:var(--accent)}
+  #infopop{position:absolute;z-index:31;left:14px;top:152px;width:392px;display:none}
+  #infopop.show{display:block}
+  #infopop .pb{font-family:var(--sans);font-size:12px;line-height:1.55;color:var(--text)}
+  #infopop .pb b{color:var(--accent)}
+  #infopop .pb p{margin-bottom:8px}
+  #infopop .closex{cursor:pointer;color:var(--dim);font-family:var(--mono);font-size:11px}
+  #infopop .closex:hover{color:var(--accent)}
+
+  /* node tooltip (lightweight, follows cursor) */
+  #tip{position:absolute;z-index:14;pointer-events:none;display:none;background:rgba(6,11,20,0.92);
+    border:1px solid var(--hair);padding:6px 9px;font-size:10px;max-width:200px;line-height:1.4;box-shadow:0 4px 20px rgba(0,0,0,0.6)}
+  #tip .tn{font-family:var(--sans);font-size:12px;color:#EAF1FA;font-weight:600}
+  #tip .tt{font-size:8.5px;letter-spacing:0.12em;text-transform:uppercase;margin-top:2px}
+  #tip .tm{font-size:9px;color:var(--dim);margin-top:3px}
+
+  .typewrite{overflow:hidden;white-space:nowrap}
+
+  /* Responsiveness: shrink panels on narrow screens */
+  @media (max-width:1100px){
+    #header,#narration,#infopop{width:300px}
+    #telemetry,#buildlog,#sources,#dossier{width:200px}
+  }
+  @media (max-width:820px){
+    #legend{display:none}
+    #buildlog{top:200px}
+    #sources{top:380px}
+  }
+</style>
+</head>
+<body>
+<div id="stage">
+  <canvas id="gfx"></canvas>
+</div>
+<div id="overlay"></div>
+
+<!-- ===================== HUD ===================== -->
+
+<div class="panel" id="header">
+  <span class="cnr tl"></span><span class="cnr tr"></span><span class="cnr bl"></span><span class="cnr br"></span>
+  <div class="pb">
+    <div class="title typewrite" id="ttl"><b>ORBITAL</b> // Knowledge Assembly Observatory</div>
+    <div class="tag">Watch a knowledge graph build itself in real time — mission control for the moment two musical worlds collide.</div>
+    <div class="meta">
+      <span>MODE <b id="modeRead">STANDBY</b></span>
+      <span>SOURCE <b id="srcRead">—</b></span>
+      <span>SPEED <b id="spdRead">1.0x</b></span>
+    </div>
+  </div>
+</div>
+
+<div id="infobtn">? WHAT IS A KNOWLEDGE GRAPH</div>
+<div class="panel" id="infopop">
+  <span class="cnr tl"></span><span class="cnr tr"></span><span class="cnr bl"></span><span class="cnr br"></span>
+  <div class="ph">PRIMER <span class="closex" id="infoclose">[ CLOSE ]</span></div>
+  <div class="pb">
+    <p>A <b>knowledge graph</b> stores facts as a network: <b>nodes</b> are entities (an artist, a city, an instrument) and <b>edges</b> are the relationships between them ("recorded in", "plays", "evolved from").</p>
+    <p>It is <b>built</b> by ingesting sources — archives, logs, datasets — and extracting entities and relations from each. As more sources arrive, separate islands of knowledge link up.</p>
+    <p>Here we reconstruct 20th-century American music. Watch the <b>Delta Blues</b>, <b>Soul</b> and <b>Rock</b> clusters appear as isolated worlds — then watch one real session-musician collective in <b>Muscle Shoals</b> bridge them into a single navigable web.</p>
+  </div>
+</div>
+
+<div class="panel" id="legend">
+  <span class="cnr tl"></span><span class="cnr tr"></span><span class="cnr bl"></span><span class="cnr br"></span>
+  <div class="ph">ENTITY LEGEND <span class="dot"></span></div>
+  <div class="pb" id="legendbody"></div>
+</div>
+
+<div class="panel" id="telemetry">
+  <span class="cnr tl"></span><span class="cnr tr"></span><span class="cnr bl"></span><span class="cnr br"></span>
+  <div class="ph">TELEMETRY <span class="dot"></span></div>
+  <div class="tgrid">
+    <div class="tile"><div class="k">Nodes</div><div class="v" id="tNodes">0</div></div>
+    <div class="tile"><div class="k">Edges</div><div class="v" id="tEdges">0</div></div>
+    <div class="tile"><div class="k">Components</div><div class="v" id="tComp">0</div></div>
+    <div class="tile"><div class="k">Avg Degree</div><div class="v" id="tDeg">0.0</div></div>
+    <div class="tile"><div class="k">Density</div><div class="v" id="tDens">0.000</div></div>
+    <div class="tile"><div class="k">Sources</div><div class="v" id="tSrc">0</div></div>
+    <div class="tile bridge none" style="grid-column:1 / span 2"><div class="k">Bridge Status</div><div class="v" id="tBridge">NONE / 0 COMPONENTS</div></div>
+  </div>
+</div>
+
+<div class="panel" id="buildlog">
+  <span class="cnr tl"></span><span class="cnr tr"></span><span class="cnr bl"></span><span class="cnr br"></span>
+  <div class="ph">BUILD LOG <span class="dot"></span></div>
+  <div class="pb"><div id="logfeed"></div></div>
+</div>
+
+<div class="panel" id="sources">
+  <span class="cnr tl"></span><span class="cnr tr"></span><span class="cnr bl"></span><span class="cnr br"></span>
+  <div class="ph">INGEST SOURCE FEED <span class="dot"></span></div>
+  <div class="pb" id="sourcebody" style="padding:2px 8px"></div>
+</div>
+
+<div class="panel" id="narration">
+  <span class="cnr tl"></span><span class="cnr tr"></span><span class="cnr bl"></span><span class="cnr br"></span>
+  <div class="ph">CONSTRUCTION NARRATIVE</div>
+  <div class="pb">
+    <div class="stage" id="stageName">00 // SYSTEM STANDBY</div>
+    <div class="desc" id="stageDesc">Awaiting ingest command. The observatory frame is booted; no entities exist yet. Press BEGIN INGEST to assemble the music-history knowledge graph from five archival sources.</div>
+    <div class="prog"><i id="stageProg"></i></div>
+  </div>
+</div>
+
+<div class="panel" id="dossier">
+  <span class="cnr tl"></span><span class="cnr tr"></span><span class="cnr bl"></span><span class="cnr br"></span>
+  <div class="ph">NODE DOSSIER <span class="closex" id="dosclose" style="cursor:pointer;color:var(--dim)">[ X ]</span></div>
+  <div class="pb" id="dossierbody"></div>
+</div>
+
+<div class="panel" id="controls">
+  <span class="cnr tl"></span><span class="cnr tr"></span><span class="cnr bl"></span><span class="cnr br"></span>
+  <div class="pb">
+    <button class="btn primary" id="btnPlay">▶ PLAY</button>
+    <button class="btn" id="btnStep">STEP ▸</button>
+    <button class="btn" id="btnRestart">↻ RESTART</button>
+    <button class="btn" id="btnBridge">⟡ REPLAY BRIDGE</button>
+    <div style="display:flex;flex-direction:column;gap:3px">
+      <span class="ctl-lbl">Speed</span>
+      <div class="seg" id="speedSeg">
+        <button class="btn" data-spd="0.5">0.5x</button>
+        <button class="btn sel" data-spd="1">1x</button>
+        <button class="btn" data-spd="2">2x</button>
+      </div>
+    </div>
+    <button class="btn on" id="btnLabels">LABELS</button>
+    <button class="btn on" id="btnParticles">PARTICLES</button>
+    <div id="timeline">
+      <span class="ctl-lbl">Timeline</span>
+      <div id="scrub">
+        <div id="scrubtrack"></div>
+        <div id="scrubfill"></div>
+        <div id="scrubknob"></div>
+      </div>
+      <span id="yearread">—</span>
+    </div>
+  </div>
+</div>
+
+<div id="tip"></div>
+
+<div id="standby">
+  <div class="sttl typewrite" id="standbyttl">// THE KNOWLEDGE ASSEMBLY OBSERVATORY //</div>
+  <button class="bigbtn" id="beginBtn">BEGIN INGEST</button>
+  <div class="shint">SPACE PLAY/PAUSE &nbsp;·&nbsp; R RESTART &nbsp;·&nbsp; DRAG TO PAN &nbsp;·&nbsp; SCROLL TO ZOOM</div>
+</div>
+
+<script>
+"use strict";
+/* ============================================================================
+   ORBITAL — single-file knowledge-graph observatory
+   Sections:
+     [1] DATA            — typed entities, edges, event list (5 ingest waves)
+     [2] BUILD CONTROLLER — replays the ordered event list; drives waves/log
+     [3] SIMULATION      — hand-rolled force-directed layout (repel/spring/grav)
+     [4] RENDER          — canvas: nebula, starfield, edges+particles, nodes, FX
+     [5] CAMERA          — pan/zoom transform + eased bridge move + idle drift
+     [6] INTERACTION     — hover/click/drag, legend filter, scrub, transport
+   ============================================================================ */
+
+const reduceMotion = window.matchMedia &&
+  window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* ----------------------------------------------------------------------------
+   [1] DATA  — the history of recorded American music.
+   Node types own a hue. Each node/edge is owned by a SOURCE (provenance).
+   Clusters: blues (amber), soul (cyan), rock (magenta), bridge (gold),
+   sampling (violet). Cluster anchors steer force layout into quadrants.
+---------------------------------------------------------------------------- */
+const TYPES = {
+  Artist:    {color:'#7DF9FF', glow:'rgba(125,249,255,'},
+  Genre:     {color:'#FF5FA2', glow:'rgba(255,95,162,'},
+  Instrument:{color:'#FFB347', glow:'rgba(255,179,71,'},
+  City:      {color:'#8B7BFF', glow:'rgba(139,123,255,'},
+  Label:     {color:'#4AF2A1', glow:'rgba(74,242,161,'},
+  Source:    {color:'#FFF4CF', glow:'rgba(255,244,207,'}
+};
+
+// Sources (ingest waves). anchor = intended quadrant centre (graph-space).
+const SOURCES = [
+  {id:'src1', name:'Lomax Field Recordings Archive', wave:1, year:'1928', color:'#FFB347', cluster:'blues', anchor:{x:-430,y:300}},
+  {id:'src2', name:'Motown & Stax Tape Vaults',       wave:2, year:'1959', color:'#7DF9FF', cluster:'soul',  anchor:{x:430,y:-300}},
+  {id:'src3', name:'British Invasion Discographies',  wave:3, year:'1966', color:'#FF5FA2', cluster:'rock',  anchor:{x:-360,y:-330}},
+  {id:'src4', name:'Muscle Shoals Session Logs',      wave:4, year:'1969', color:'#FFF4CF', cluster:'bridge',anchor:{x:40,y:30}},
+  {id:'src5', name:'Sampling & Streaming Co-listen',  wave:5, year:'1988', color:'#8B7BFF', cluster:'samp',  anchor:{x:430,y:330}}
+];
+
+/* Node catalogue. d = short dossier description, y = year, src = owning source. */
+const NODES = [
+  // ---- WAVE 1 : DELTA BLUES (amber-ish, lower-left) ----
+  {id:'mississippi', label:'Mississippi Delta', type:'City', src:'src1', y:'—', cl:'blues', d:'The alluvial cotton country where the deepest country blues took root in the early 20th century.'},
+  {id:'robertjohnson',label:'Robert Johnson', type:'Artist', src:'src1', y:'1936', cl:'blues', d:'Itinerant Delta bluesman whose 29 recordings became the genre\'s Rosetta Stone for generations of rock guitarists.'},
+  {id:'sonhouse', label:'Son House', type:'Artist', src:'src1', y:'1930', cl:'blues', d:'Preacher-turned-bluesman; a raw slide style that shaped Johnson and Muddy Waters alike.'},
+  {id:'charleypatton',label:'Charley Patton', type:'Artist', src:'src1', y:'1929', cl:'blues', d:'The "Father of the Delta Blues," a percussive showman recorded by Paramount.'},
+  {id:'deltablues', label:'Delta Blues', type:'Genre', src:'src1', y:'1920s', cl:'blues', d:'Stark, slide-driven country blues — the headwater of nearly all American popular music to follow.'},
+  {id:'resonator', label:'Resonator Guitar', type:'Instrument', src:'src1', y:'1927', cl:'blues', d:'Metal-bodied guitar built for volume; the cutting voice of bottleneck slide blues.'},
+  {id:'paramount', label:'Paramount Records', type:'Label', src:'src1', y:'1917', cl:'blues', d:'Wisconsin furniture-company label that, improbably, cut foundational Delta blues sides.'},
+  {id:'slidetech', label:'Bottleneck Slide', type:'Instrument', src:'src1', y:'1900s', cl:'blues', d:'A glass or metal slide drawn across strings to bend pitch — the signature blues cry.'},
+  {id:'muddywaters', label:'Muddy Waters', type:'Artist', src:'src1', y:'1941', cl:'blues', d:'Recorded by Alan Lomax in Mississippi, then electrified the blues in Chicago — the link to rock.'},
+  {id:'leadbelly', label:'Lead Belly', type:'Artist', src:'src1', y:'1933', cl:'blues', d:'Twelve-string songster whom the Lomaxes recorded at Angola prison; a vast living songbook.'},
+  {id:'chess', label:'Chess Records', type:'Label', src:'src1', y:'1950', cl:'blues', d:'Chicago label that amplified the Delta sound for the city — Muddy, Wolf, and the blues canon.'},
+  {id:'chicago', label:'Chicago', type:'City', src:'src1', y:'—', cl:'blues', d:'Destination of the Great Migration, where acoustic Delta blues plugged in and got loud.'},
+  {id:'harmonica', label:'Blues Harp', type:'Instrument', src:'src1', y:'1900s', cl:'blues', d:'The cupped, bent harmonica voice that cried alongside the slide guitar.'},
+  {id:'twelvebar', label:'12-Bar Blues Form', type:'Genre', src:'src1', y:'1910s', cl:'blues', d:'The chord skeleton — I-IV-V over twelve bars — that underpins blues, rock, and R&B alike.'},
+  {id:'alanlomax', label:'Alan Lomax', type:'Artist', src:'src1', y:'1933', cl:'blues', d:'Folklorist who hauled a disc recorder across the South, preserving the music before it vanished.'},
+
+  // ---- WAVE 2 : SOUL / R&B (cyan, upper-right) ----
+  {id:'detroit', label:'Detroit', type:'City', src:'src2', y:'—', cl:'soul', d:'Motor City; Berry Gordy\'s Motown turned it into a hit factory of crossover soul.'},
+  {id:'memphis', label:'Memphis', type:'City', src:'src2', y:'—', cl:'soul', d:'Home of Stax Records and a grittier Southern soul than Detroit\'s polished pop-soul.'},
+  {id:'motown', label:'Motown Records', type:'Label', src:'src2', y:'1959', cl:'soul', d:'Berry Gordy\'s assembly-line hit machine; "The Sound of Young America."'},
+  {id:'stax', label:'Stax Records', type:'Label', src:'src2', y:'1957', cl:'soul', d:'Memphis soul label whose house band gave the music its raw, horn-soaked grit.'},
+  {id:'soul', label:'Soul / R&B', type:'Genre', src:'src2', y:'1950s', cl:'soul', d:'Gospel fervor fused with R&B; the emotional core of mid-century Black popular music.'},
+  {id:'arethaplaceholder', label:'Otis Redding', type:'Artist', src:'src2', y:'1962', cl:'soul', d:'Stax\'s definitive voice; "(Sittin\' On) The Dock of the Bay" crowned a brief, towering career.'},
+  {id:'marvin', label:'Marvin Gaye', type:'Artist', src:'src2', y:'1961', cl:'soul', d:'Motown\'s restless genius who pushed soul toward social commentary and lush production.'},
+  {id:'hammond', label:'Hammond B-3 Organ', type:'Instrument', src:'src2', y:'1955', cl:'soul', d:'Drawbar electric organ whose churchy swell defined the soul and gospel sound.'},
+  {id:'horns', label:'Horn Section', type:'Instrument', src:'src2', y:'1950s', cl:'soul', d:'Punchy trumpet/sax stabs — the Memphis Horns made them a soul signature.'},
+  {id:'boozer', label:'Booker T. & the M.G.\'s', type:'Artist', src:'src2', y:'1962', cl:'soul', d:'Stax\'s integrated house band; the groove engine behind countless soul hits.'},
+  {id:'aretha', label:'Aretha Franklin', type:'Artist', src:'src2', y:'1967', cl:'soul', d:'The Queen of Soul, whose Atlantic breakthrough was cut with the Muscle Shoals rhythm section.'},
+  {id:'jamesbrown', label:'James Brown', type:'Artist', src:'src2', y:'1956', cl:'soul', d:'The Godfather of Soul; his drum breaks would become the most-sampled rhythms in history.'},
+  {id:'gospel', label:'Gospel', type:'Genre', src:'src2', y:'1930s', cl:'soul', d:'The sacred root of soul — call-and-response fervor secularized into R&B.'},
+  {id:'atlantic', label:'Atlantic Records', type:'Label', src:'src2', y:'1947', cl:'soul', d:'New York label that sent its stars South to Stax and Muscle Shoals for an authentic soul sound.'},
+  {id:'memphishorns', label:'The Memphis Horns', type:'Artist', src:'src2', y:'1963', cl:'soul', d:'Wayne Jackson and Andrew Love — the brass that punctuated nearly every Stax hit.'},
+  {id:'bass', label:'Electric Bass', type:'Instrument', src:'src2', y:'1951', cl:'soul', d:'James Jamerson\'s melodic Motown basslines redefined what the instrument could carry.'},
+  {id:'rnb', label:'Rhythm & Blues', type:'Genre', src:'src2', y:'1940s', cl:'soul', d:'The danceable, backbeat-driven Black popular music that soul and rock both grew from.'},
+
+  // ---- WAVE 3 : ROCK (magenta, upper-left) ----
+  {id:'london', label:'London', type:'City', src:'src3', y:'—', cl:'rock', d:'Epicentre of the British Invasion, where young Englishmen reimported American blues.'},
+  {id:'rock', label:'Rock', type:'Genre', src:'src3', y:'1960s', cl:'rock', d:'Amplified, guitar-forward descendant of blues and R&B that conquered the world.'},
+  {id:'stones', label:'The Rolling Stones', type:'Artist', src:'src3', y:'1962', cl:'rock', d:'London blues purists turned global rock band; named after a Muddy Waters tune.'},
+  {id:'beatles', label:'The Beatles', type:'Artist', src:'src3', y:'1960', cl:'rock', d:'The defining pop-rock act; their early sets leaned on American R&B covers.'},
+  {id:'clapton', label:'Eric Clapton', type:'Artist', src:'src3', y:'1963', cl:'rock', d:'British guitar god whose entire vocabulary descends from Delta and Chicago blues.'},
+  {id:'marshall', label:'Marshall Stack', type:'Instrument', src:'src3', y:'1962', cl:'rock', d:'Towering valve amplifier; the loud, distorted voice of British rock.'},
+  {id:'electricblues',label:'Electric Blues Covers', type:'Genre', src:'src3', y:'1960s', cl:'rock', d:'The British habit of electrifying and covering American blues standards.'},
+  {id:'decca', label:'Decca Records', type:'Label', src:'src3', y:'1929', cl:'rock', d:'British major that signed the Stones; a hub of the Invasion-era industry.'},
+  {id:'ledzep', label:'Led Zeppelin', type:'Artist', src:'src3', y:'1968', cl:'rock', d:'Built thunderous hard rock atop barely-disguised Delta and Chicago blues numbers.'},
+  {id:'hendrix', label:'Jimi Hendrix', type:'Artist', src:'src3', y:'1966', cl:'rock', d:'American bluesman who broke big in London; rewrote the electric guitar\'s vocabulary.'},
+  {id:'fender', label:'Fender Stratocaster', type:'Instrument', src:'src3', y:'1954', cl:'rock', d:'The bolt-neck electric guitar that became rock\'s defining solo voice.'},
+  {id:'fuzz', label:'Fuzz Pedal', type:'Instrument', src:'src3', y:'1962', cl:'rock', d:'The distortion box behind "Satisfaction" — the snarl of mid-60s rock.'},
+  {id:'liverpool', label:'Liverpool', type:'City', src:'src3', y:'—', cl:'rock', d:'Port city where Mersey-beat bands soaked up imported American R&B records.'},
+  {id:'bluesrock', label:'Blues Rock', type:'Genre', src:'src3', y:'1966', cl:'rock', d:'The heavy, electrified blues revival that the British scene exported back to America.'},
+
+  // ---- WAVE 4 : THE BRIDGE — MUSCLE SHOALS (gold, centre) ----
+  {id:'muscleshoals', label:'Muscle Shoals, AL', type:'City', src:'src4', y:'—', cl:'bridge', d:'Sleepy Alabama town whose studios cut both deep soul AND blues-rock — the geographic keystone.'},
+  {id:'swampers', label:'The Swampers (FAME Section)', type:'Artist', src:'src4', y:'1969', cl:'bridge', d:'The white Alabama rhythm section that backed Aretha Franklin\'s soul classics AND the Rolling Stones\' blues-rock — the human bridge between worlds.'},
+  {id:'fame', label:'FAME Studios', type:'Label', src:'src4', y:'1959', cl:'bridge', d:'Rick Hall\'s studio where the Muscle Shoals sound — soul cut by a blues-steeped band — was born.'},
+  {id:'soundstudio', label:'Muscle Shoals Sound', type:'Label', src:'src4', y:'1969', cl:'bridge', d:'The studio the Swampers built after leaving FAME — where the Stones cut "Brown Sugar."'},
+  {id:'rickhall', label:'Rick Hall', type:'Artist', src:'src4', y:'1959', cl:'bridge', d:'FAME founder whose integrated sessions broke racial lines and birthed Southern soul.'},
+
+  // ---- WAVE 5 : SAMPLING / HIP-HOP (violet, lower-right) ----
+  {id:'hiphop', label:'Hip-Hop', type:'Genre', src:'src5', y:'1973', cl:'samp', d:'Sample-based music that rebuilds the entire 20th-century canon into new grooves.'},
+  {id:'sampling', label:'Sampling', type:'Instrument', src:'src5', y:'1980s', cl:'samp', d:'The act of lifting recorded fragments — drums, horns, riffs — to compose new tracks.'},
+  {id:'sp1200', label:'E-mu SP-1200', type:'Instrument', src:'src5', y:'1987', cl:'samp', d:'Gritty 12-bit sampler/sequencer that defined the golden-age boom-bap sound.'},
+  {id:'nyc', label:'New York City', type:'City', src:'src5', y:'—', cl:'samp', d:'Birthplace of hip-hop in the Bronx; the lab where the sampling era was forged.'},
+  {id:'producer', label:'The Sample Producer', type:'Artist', src:'src5', y:'1988', cl:'samp', d:'Crate-digging beatmaker who fuses blues guitar, soul horns, and rock breaks into one track.'},
+  {id:'breakbeat', label:'The Funky Drummer Break', type:'Instrument', src:'src5', y:'1970', cl:'samp', d:'A James Brown drum break — soul\'s rhythmic DNA — sampled across thousands of hip-hop records.'},
+  {id:'turntable', label:'Turntables', type:'Instrument', src:'src5', y:'1973', cl:'samp', d:'Two decks and a mixer: the Bronx instrument that looped breaks into a new music.'},
+  {id:'mpc', label:'Akai MPC60', type:'Instrument', src:'src5', y:'1988', cl:'samp', d:'Pad-based sampler/sequencer that put the entire sampling workflow in one box.'},
+  {id:'defjam', label:'Def Jam Recordings', type:'Label', src:'src5', y:'1984', cl:'samp', d:'The label that took sample-built rap from the boroughs to the mainstream.'},
+  {id:'amen', label:'The Amen Break', type:'Instrument', src:'src5', y:'1969', cl:'samp', d:'A six-second soul drum break that seeded hip-hop, jungle, and drum-and-bass.'},
+  {id:'electronic', label:'Electronic / Dance', type:'Genre', src:'src5', y:'1980s', cl:'samp', d:'House and techno descendants that loop soul and disco fragments into the future.'},
+  {id:'streaming', label:'Streaming Co-listen', type:'Genre', src:'src5', y:'2010s', cl:'samp', d:'Recommendation graphs that quantify which eras and artists listeners actually connect.'}
+];
+
+/* Edges: {s,t,src,w(weight 1-3 -> particle speed/density), label, bridge?} */
+const EDGES = [
+  // WAVE 1 internal
+  {s:'robertjohnson',t:'deltablues',src:'src1',w:3,label:'performs'},
+  {s:'sonhouse',t:'deltablues',src:'src1',w:2,label:'performs'},
+  {s:'charleypatton',t:'deltablues',src:'src1',w:2,label:'performs'},
+  {s:'deltablues',t:'mississippi',src:'src1',w:3,label:'originates in'},
+  {s:'robertjohnson',t:'resonator',src:'src1',w:2,label:'plays'},
+  {s:'sonhouse',t:'slidetech',src:'src1',w:2,label:'plays'},
+  {s:'resonator',t:'slidetech',src:'src1',w:2,label:'pairs with'},
+  {s:'charleypatton',t:'paramount',src:'src1',w:2,label:'recorded by'},
+  {s:'robertjohnson',t:'sonhouse',src:'src1',w:1,label:'influenced by'},
+  {s:'muddywaters',t:'deltablues',src:'src1',w:3,label:'performs'},
+  {s:'muddywaters',t:'mississippi',src:'src1',w:2,label:'born in'},
+  {s:'muddywaters',t:'chicago',src:'src1',w:3,label:'migrated to'},
+  {s:'muddywaters',t:'chess',src:'src1',w:3,label:'signed to'},
+  {s:'chess',t:'chicago',src:'src1',w:2,label:'based in'},
+  {s:'muddywaters',t:'sonhouse',src:'src1',w:1,label:'influenced by'},
+  {s:'alanlomax',t:'muddywaters',src:'src1',w:2,label:'recorded'},
+  {s:'alanlomax',t:'leadbelly',src:'src1',w:3,label:'recorded'},
+  {s:'leadbelly',t:'twelvebar',src:'src1',w:2,label:'plays'},
+  {s:'deltablues',t:'twelvebar',src:'src1',w:3,label:'built on'},
+  {s:'muddywaters',t:'harmonica',src:'src1',w:2,label:'features'},
+  {s:'muddywaters',t:'slidetech',src:'src1',w:2,label:'plays'},
+
+  // WAVE 2 internal
+  {s:'marvin',t:'soul',src:'src2',w:3,label:'performs'},
+  {s:'arethaplaceholder',t:'soul',src:'src2',w:3,label:'performs'},
+  {s:'marvin',t:'motown',src:'src2',w:3,label:'signed to'},
+  {s:'arethaplaceholder',t:'stax',src:'src2',w:3,label:'signed to'},
+  {s:'motown',t:'detroit',src:'src2',w:3,label:'based in'},
+  {s:'stax',t:'memphis',src:'src2',w:3,label:'based in'},
+  {s:'boozer',t:'stax',src:'src2',w:3,label:'house band'},
+  {s:'boozer',t:'hammond',src:'src2',w:2,label:'plays'},
+  {s:'soul',t:'horns',src:'src2',w:2,label:'features'},
+  {s:'soul',t:'hammond',src:'src2',w:2,label:'features'},
+  {s:'arethaplaceholder',t:'horns',src:'src2',w:2,label:'backed by'},
+  {s:'aretha',t:'soul',src:'src2',w:3,label:'performs'},
+  {s:'aretha',t:'atlantic',src:'src2',w:3,label:'signed to'},
+  {s:'aretha',t:'gospel',src:'src2',w:3,label:'rooted in'},
+  {s:'soul',t:'gospel',src:'src2',w:3,label:'descends from'},
+  {s:'soul',t:'rnb',src:'src2',w:3,label:'descends from'},
+  {s:'jamesbrown',t:'soul',src:'src2',w:3,label:'performs'},
+  {s:'jamesbrown',t:'rnb',src:'src2',w:2,label:'performs'},
+  {s:'memphishorns',t:'horns',src:'src2',w:3,label:'embodies'},
+  {s:'memphishorns',t:'stax',src:'src2',w:3,label:'house horns'},
+  {s:'memphishorns',t:'memphis',src:'src2',w:2,label:'based in'},
+  {s:'marvin',t:'bass',src:'src2',w:2,label:'features'},
+  {s:'motown',t:'bass',src:'src2',w:2,label:'sound of'},
+  {s:'atlantic',t:'soul',src:'src2',w:2,label:'releases'},
+  {s:'boozer',t:'memphis',src:'src2',w:1,label:'based in'},
+
+  // WAVE 3 internal
+  {s:'stones',t:'rock',src:'src3',w:3,label:'performs'},
+  {s:'beatles',t:'rock',src:'src3',w:3,label:'performs'},
+  {s:'clapton',t:'rock',src:'src3',w:2,label:'performs'},
+  {s:'stones',t:'london',src:'src3',w:2,label:'based in'},
+  {s:'beatles',t:'london',src:'src3',w:2,label:'works in'},
+  {s:'stones',t:'decca',src:'src3',w:2,label:'signed to'},
+  {s:'rock',t:'marshall',src:'src3',w:2,label:'amplified by'},
+  {s:'clapton',t:'electricblues',src:'src3',w:3,label:'specializes in'},
+  {s:'stones',t:'electricblues',src:'src3',w:2,label:'covers'},
+  {s:'clapton',t:'marshall',src:'src3',w:2,label:'plays'},
+  {s:'ledzep',t:'rock',src:'src3',w:3,label:'performs'},
+  {s:'ledzep',t:'bluesrock',src:'src3',w:3,label:'defines'},
+  {s:'ledzep',t:'marshall',src:'src3',w:2,label:'plays'},
+  {s:'hendrix',t:'rock',src:'src3',w:3,label:'performs'},
+  {s:'hendrix',t:'london',src:'src3',w:2,label:'broke out in'},
+  {s:'hendrix',t:'fender',src:'src3',w:3,label:'plays'},
+  {s:'hendrix',t:'fuzz',src:'src3',w:2,label:'plays'},
+  {s:'rock',t:'fender',src:'src3',w:2,label:'voiced by'},
+  {s:'stones',t:'fuzz',src:'src3',w:2,label:'plays'},
+  {s:'beatles',t:'liverpool',src:'src3',w:3,label:'from'},
+  {s:'bluesrock',t:'electricblues',src:'src3',w:2,label:'extends'},
+  {s:'clapton',t:'bluesrock',src:'src3',w:2,label:'performs'},
+
+  // WAVE 4 internal bridge cluster
+  {s:'swampers',t:'fame',src:'src4',w:3,label:'house band'},
+  {s:'fame',t:'muscleshoals',src:'src4',w:3,label:'located in'},
+  {s:'swampers',t:'muscleshoals',src:'src4',w:2,label:'based in'},
+  {s:'rickhall',t:'fame',src:'src4',w:3,label:'founded'},
+  {s:'swampers',t:'soundstudio',src:'src4',w:3,label:'founded'},
+  {s:'soundstudio',t:'muscleshoals',src:'src4',w:2,label:'located in'},
+
+  // ===== THE BRIDGE EDGES — the aha moment =====
+  // Swampers -> soul horn lineage (recorded Aretha at Atlantic/FAME)
+  {s:'swampers',t:'horns',src:'src4',w:3,label:'cut soul horns for',bridge:true},
+  {s:'swampers',t:'aretha',src:'src4',w:3,label:'backed Aretha Franklin',bridge:true},
+  {s:'fame',t:'atlantic',src:'src4',w:2,label:'cut soul for',bridge:true},
+  // Swampers -> blues/rock guitar lineage (recorded the Stones' blues-rock)
+  {s:'swampers',t:'stones',src:'src4',w:3,label:'cut "Brown Sugar" for',bridge:true},
+  {s:'soundstudio',t:'electricblues',src:'src4',w:2,label:'cut blues-rock for',bridge:true},
+
+  // WAVE 5 — sampling densifies & ties everything together
+  {s:'producer',t:'hiphop',src:'src5',w:3,label:'performs'},
+  {s:'hiphop',t:'sampling',src:'src5',w:3,label:'built on'},
+  {s:'sampling',t:'sp1200',src:'src5',w:2,label:'uses'},
+  {s:'producer',t:'nyc',src:'src5',w:2,label:'works in'},
+  {s:'hiphop',t:'nyc',src:'src5',w:2,label:'originates in'},
+  {s:'sampling',t:'breakbeat',src:'src5',w:3,label:'lifts'},
+  // samples reach into ALL prior clusters
+  {s:'breakbeat',t:'soul',src:'src5',w:3,label:'sourced from'},
+  {s:'sampling',t:'resonator',src:'src5',w:2,label:'samples'},
+  {s:'sampling',t:'horns',src:'src5',w:2,label:'samples'},
+  {s:'producer',t:'marshall',src:'src5',w:1,label:'samples rock'},
+  {s:'producer',t:'deltablues',src:'src5',w:2,label:'samples blues'},
+  {s:'producer',t:'marvin',src:'src5',w:2,label:'samples soul'},
+  {s:'hiphop',t:'turntable',src:'src5',w:3,label:'built on'},
+  {s:'turntable',t:'breakbeat',src:'src5',w:2,label:'loops'},
+  {s:'sampling',t:'mpc',src:'src5',w:2,label:'uses'},
+  {s:'hiphop',t:'defjam',src:'src5',w:3,label:'released on'},
+  {s:'producer',t:'defjam',src:'src5',w:1,label:'signed to'},
+  {s:'breakbeat',t:'jamesbrown',src:'src5',w:3,label:'sampled from'},
+  {s:'amen',t:'jamesbrown',src:'src5',w:1,label:'kin to'},
+  {s:'sampling',t:'amen',src:'src5',w:3,label:'lifts'},
+  {s:'amen',t:'soul',src:'src5',w:2,label:'sourced from'},
+  {s:'electronic',t:'sampling',src:'src5',w:2,label:'built on'},
+  {s:'electronic',t:'amen',src:'src5',w:2,label:'lifts'},
+  {s:'streaming',t:'hiphop',src:'src5',w:1,label:'links'},
+  {s:'streaming',t:'soul',src:'src5',w:1,label:'links'},
+  {s:'streaming',t:'rock',src:'src5',w:1,label:'links'},
+  {s:'streaming',t:'deltablues',src:'src5',w:1,label:'links'},
+  {s:'producer',t:'amen',src:'src5',w:2,label:'samples'},
+  {s:'sampling',t:'aretha',src:'src5',w:1,label:'samples soul'},
+  {s:'producer',t:'ledzep',src:'src5',w:1,label:'samples rock'}
+];
+
+/* Build an ordered EVENT list. The whole animation + scrubber replay this.
+   Per wave: emit a 'source' marker, then addNode events, then addEdge events
+   (only edges whose both endpoints already exist at that point). */
+/* Each SOURCE is ALSO materialised as a visible "Source / Ingest" node that
+   orbits its cluster. Its provenance edges (source -> first few entities) are
+   drawn but EXCLUDED from connected-components union-find, so the "3 isolated
+   clusters" story stays true until the real Muscle Shoals bridge forms. */
+const SOURCE_NODES = SOURCES.map(s=>({
+  id:'node_'+s.id, label:s.name.replace(/ &.*$/,'').replace(/ Discographies| Archive| Co-listen Graph| Co-listen| Session Logs| Tape Vaults/,''),
+  fullname:s.name, type:'Source', src:s.id, y:s.year, cl:s.cluster,
+  d:'INGEST SOURCE · Wave '+s.wave+'. '+sourceDesc(s.id)+' Provenance feed for the '+s.cluster.toUpperCase()+' entities in this graph.',
+  isSource:true
+}));
+function sourceDesc(id){
+  return ({
+    src1:'Alan & John Lomax\'s portable-disc field recordings of the rural South for the Library of Congress.',
+    src2:'Master-tape ledgers from the Motown and Stax vaults documenting session personnel and dates.',
+    src3:'Catalogued UK label discographies of the bands that re-exported American blues.',
+    src4:'Session logs from FAME and Muscle Shoals Sound naming who played on which record.',
+    src5:'Sample-clearance databases joined to streaming co-listen recommendation graphs.'
+  })[id]||'';
+}
+
+const EVENTS = [];
+(function buildEvents(){
+  const present = new Set();
+  for(const src of SOURCES){
+    EVENTS.push({op:'source', src:src.id});
+    // the source's own visible node spawns first
+    EVENTS.push({op:'addNode', id:'node_'+src.id, src:src.id});
+    present.add('node_'+src.id);
+    // then the entities it introduces
+    const own = NODES.filter(n=>n.src===src.id);
+    own.forEach((n,i)=>{
+      EVENTS.push({op:'addNode', id:n.id, src:src.id});
+      present.add(n.id);
+      // provenance link from the source node to its first 3 entities (visual only)
+      if(i<3) EVENTS.push({op:'addEdge', s:'node_'+src.id, t:n.id, src:src.id, w:1, label:'ingested', prov:true});
+    });
+    // entity-to-entity relations whose endpoints both now present
+    for(const e of EDGES) if(e.src===src.id && present.has(e.s) && present.has(e.t)){
+      EVENTS.push({op:'addEdge', s:e.s, t:e.t, src:src.id, bridge:!!e.bridge, w:e.w, label:e.label});
+    }
+  }
+})();
+
+// quick lookups (entity + source nodes both resolvable)
+const ALL_NODES = NODES.concat(SOURCE_NODES);
+const NODE_BY_ID = {}; ALL_NODES.forEach(n=>NODE_BY_ID[n.id]=n);
+const SRC_BY_ID  = {}; SOURCES.forEach(s=>SRC_BY_ID[s.id]=s);
+const EDGE_KEY = (a,b)=> a<b ? a+'|'+b : b+'|'+a;
+const EDGE_BY_KEY = {}; EDGES.forEach(e=>EDGE_BY_KEY[EDGE_KEY(e.s,e.t)]=e);
+
+const typeColor = t => (t==='Source'?TYPES.Source.color:(TYPES[t]?TYPES[t].color:'#9aa'));
+
+/* ----------------------------------------------------------------------------
+   STAGE narration text, keyed to the event the controller is on.
+---------------------------------------------------------------------------- */
+const STAGES = [
+  {name:'00 // SYSTEM STANDBY', desc:'Awaiting ingest command. The observatory frame is booted; no entities exist yet. Press PLAY to assemble the music-history knowledge graph from five archival sources.'},
+  {name:'01 // SEED — DELTA BLUES (1920s–40s)', desc:'The Lomax Field Recordings source ignites. Amber blues entities spawn one by one — Robert Johnson, the resonator guitar, the Mississippi Delta — settling into a lone warm constellation. The origin point of it all.'},
+  {name:'02 // SECOND COMPONENT — SOUL / R&B (1950s–60s)', desc:'The Motown & Stax tape vaults light up. A cyan soul cluster grows far across the void — deliberately disconnected. BRIDGE STATUS turns red: two isolated worlds with no path between them.'},
+  {name:'03 // THIRD COMPONENT — ROCK (late 1960s)', desc:'British Invasion discographies spawn a magenta rock cluster. The components counter rolls to 3. Three glowing islands now float in the dark, edges crackling within each but never across.'},
+  {name:'04 // THE BRIDGE — MUSCLE SHOALS (1969)', desc:'The climax. The Muscle Shoals session logs ingest a white-gold node into the void — the Swampers. It fires bridge edges to BOTH the blues-rock guitar lineage AND the soul horn lineage. Components roll 3 → 1. The network becomes one navigable whole.'},
+  {name:'05 // DENSIFICATION — SAMPLING ERA (1980s–now)', desc:'The streaming co-listen graph overlays violet hip-hop nodes that sample blues, soul, AND rock at once. The unified web thickens and breathes — proving the bridge was the keystone that made everything reachable.'},
+  {name:'06 // EXPLORE MODE', desc:'Assembly complete. Scrub the timeline to rewind, hover any node for its dossier, filter by entity type, click a source to see what it contributed, or replay the bridge moment. The observatory idles like a living monitor.'}
+];
+
+/* ============================================================================
+   [2] BUILD CONTROLLER — live graph state + event replay
+   ============================================================================ */
+const G = {
+  nodes:[],            // live node objects {id,...,x,y,vx,vy,born,scale,opacity}
+  edges:[],            // live edge objects {s,t,...,grow,particles[]}
+  nodeMap:{},          // id -> live node
+  edgeSet:new Set(),   // EDGE_KEY present
+  sourcesIngested:0,
+  curSource:null
+};
+
+// Union-Find for connected-components counter (rolls 3 -> 1 at bridge)
+const UF = {
+  parent:{},
+  add(id){ if(!(id in this.parent)) this.parent[id]=id; },
+  find(x){ while(this.parent[x]!==x){ this.parent[x]=this.parent[this.parent[x]]; x=this.parent[x]; } return x; },
+  union(a,b){ const ra=this.find(a), rb=this.find(b); if(ra!==rb) this.parent[ra]=rb; },
+  components(){ let c=0; for(const k in this.parent) if(this.find(k)===k) c++; return c; }
+};
+
+let eventIdx = 0;            // how many events have been applied
+let playing = false;
+let speed = 1;
+let showLabels = true;
+let showParticles = !reduceMotion;
+let lastEventTime = 0;       // timestamp gate for paced ingestion
+const BASE_INTERVAL = 520;   // ms between auto events at 1x
+
+// Activity log
+const logfeed = document.getElementById('logfeed');
+function log(msg, cls){
+  const row = document.createElement('div');
+  row.className = 'logrow' + (cls?(' '+cls):'');
+  const ts = '+' + (G.curYear||SOURCES[0].year);
+  row.innerHTML = `<span class="ts">${ts}</span><span class="msg">${msg}</span>`;
+  logfeed.appendChild(row);
+  logfeed.scrollTop = logfeed.scrollHeight;
+  // cap log length
+  while(logfeed.children.length>120) logfeed.removeChild(logfeed.firstChild);
+}
+
+/* Apply a single event forward. Returns true if a node was spawned (for FX). */
+function applyEvent(ev){
+  if(ev.op==='source'){
+    const s = SRC_BY_ID[ev.src];
+    G.sourcesIngested++;
+    G.curSource = s;
+    G.curYear = s.year;
+    markSourceActive(s.id);
+    log(`INGEST &gt; <em>${s.name}</em>`, 'evt');
+    // advance narration to the matching wave stage
+    setStage(s.wave);
+    document.getElementById('srcRead').textContent = s.name.split(' ')[0].toUpperCase();
+    return false;
+  }
+  if(ev.op==='addNode'){
+    const def = NODE_BY_ID[ev.id];
+    const s = SRC_BY_ID[ev.src];
+    const node = makeNode(def, s, false);
+    G.nodes.push(node);
+    G.nodeMap[node.id]=node;
+    UF.add(node.id);
+    if(!reduceMotion) spawnIgnition(node);
+    if(def.isSource) log(`INGEST &gt; source node <em>${def.label}</em> online`, 'evt');
+    else log(`EXTRACT &gt; +entity <em>${def.label}</em> [${def.type}]`, '');
+    return true;
+  }
+  if(ev.op==='addEdge'){
+    const key = EDGE_KEY(ev.s,ev.t);
+    if(G.edgeSet.has(key)) return false;
+    const a = G.nodeMap[ev.s], b = G.nodeMap[ev.t];
+    if(!a||!b) return false;
+    const compBefore = UF.components();
+    // provenance edges DON'T merge components (preserve isolated-cluster story)
+    if(!ev.prov) UF.union(ev.s, ev.t);
+    const edge = {
+      s:ev.s, t:ev.t, sNode:a, tNode:b, w:ev.w||1, label:ev.label||'',
+      src:ev.src, bridge:!!ev.bridge, prov:!!ev.prov,
+      grow: reduceMotion?1:0,            // 0..1 line-grow animation
+      born: performance.now(),
+      particles: makeParticles(ev.w||1, ev.bridge)
+    };
+    G.edges.push(edge);
+    G.edgeSet.add(key);
+    a.degree++; b.degree++;
+    if(ev.bridge){
+      log(`RELATION &gt; <em>BRIDGE</em> ${NODE_BY_ID[ev.s].label} ⇄ ${NODE_BY_ID[ev.t].label}`, 'bridge');
+      onBridgeEdge(edge, compBefore);
+    } else if(!ev.prov){
+      log(`RELATION &gt; ${NODE_BY_ID[ev.s].label} → ${NODE_BY_ID[ev.t].label} <em>(${ev.label})</em>`, '');
+    }
+    return false;
+  }
+  return false;
+}
+
+/* Factory: build a live node from a def. `settled` skips entrance anim (rebuild). */
+function makeNode(def, s, settled){
+  const a = s.anchor;
+  // source nodes sit a bit outside the cluster centre so they read as satellites
+  const baseRad = def.isSource ? 150 : (40+Math.random()*120);
+  const ang = Math.random()*Math.PI*2;
+  return {
+    ...def,
+    x: a.x + Math.cos(ang)*baseRad,
+    y: a.y + Math.sin(ang)*baseRad,
+    vx:0, vy:0,
+    anchor:a,
+    r: def.isSource?8.5 : (def.type==='Genre'||def.type==='City')?8:6.5,
+    born: settled ? performance.now()-7000 : performance.now(),
+    scale: (settled||reduceMotion)?1:0.3,
+    opacity:(settled||reduceMotion)?1:0,
+    degree:0,
+    color: typeColor(def.type),
+    glow: (TYPES[def.type]||TYPES.Source).glow
+  };
+}
+
+function makeParticles(w, bridge){
+  if(reduceMotion) return [];
+  const n = bridge?7 : (2 + w);            // density scales with weight
+  const arr=[];
+  for(let i=0;i<n;i++) arr.push({phase:Math.random()});
+  return arr;
+}
+
+// Mark a source row active in the feed
+function markSourceActive(id){
+  document.querySelectorAll('#sourcebody .srow').forEach(r=>{
+    r.classList.toggle('active', r.dataset.src===id);
+    if(r.dataset.src===id) r.classList.remove('pending');
+  });
+}
+
+/* Bridge moment: roll components 3->1, flip status, pulse clusters, camera move */
+let bridgePulse = 0;        // 0..1 decaying pulse for the two clusters
+function onBridgeEdge(edge, compBefore){
+  // only trigger the big beat for the first bridge edge of the wave
+  if(!G.bridgeFired){
+    G.bridgeFired = true;
+    // camera ease to bridge midpoint
+    const mx = (edge.sNode.x+edge.tNode.x)/2, my=(edge.sNode.y+edge.tNode.y)/2;
+    if(!reduceMotion) Camera.easeTo(mx, my, 1.35, 1500);
+    bridgePulse = 1;
+    setBridgeStatus(true);
+    spawnBridgeShock(edge);
+  }
+}
+
+/* ---------- Stage / narration display ---------- */
+function setStage(wave){
+  const st = STAGES[wave] || STAGES[0];
+  document.getElementById('stageName').textContent = st.name;
+  document.getElementById('stageDesc').textContent = st.desc;
+}
+
+/* ---------- Telemetry with digit-roll ---------- */
+const telCache = {};
+function rollNumber(elId, value, fmt){
+  const el = document.getElementById(elId);
+  const str = fmt?fmt(value):String(value);
+  if(telCache[elId]===str) return;
+  telCache[elId]=str;
+  el.textContent = str;
+  el.style.transition='none'; el.style.transform='translateY(-3px)'; el.style.opacity='0.55';
+  requestAnimationFrame(()=>{ el.style.transition='transform .25s, opacity .25s'; el.style.transform='none'; el.style.opacity='1'; });
+}
+function updateTelemetry(){
+  const N=G.nodes.length, E=G.edges.length;
+  const comp = N? UF.components():0;
+  const avgDeg = N? (2*E/N):0;
+  const dens = N>1? (2*E/(N*(N-1))):0;
+  rollNumber('tNodes', N);
+  rollNumber('tEdges', E);
+  rollNumber('tComp', comp);
+  rollNumber('tDeg', avgDeg, v=>v.toFixed(2));
+  rollNumber('tDens', dens, v=>v.toFixed(3));
+  rollNumber('tSrc', G.sourcesIngested);
+  // legend counts
+  for(const t in TYPES){
+    const c = G.nodes.filter(n=>n.type===t).length;
+    const el = document.getElementById('lc-'+t);
+    if(el) el.textContent = c;
+  }
+}
+function setBridgeStatus(active){
+  const tile = document.querySelector('.tile.bridge');
+  const el = document.getElementById('tBridge');
+  const comp = G.nodes.length?UF.components():0;
+  if(active){
+    tile.classList.remove('none'); tile.classList.add('active');
+    el.textContent = 'ACTIVE / '+comp+' COMPONENT'+(comp===1?'':'S');
+  } else {
+    tile.classList.add('none'); tile.classList.remove('active');
+    el.textContent = (comp<=1?'PENDING':'NONE')+' / '+comp+' COMPONENT'+(comp===1?'':'S');
+  }
+}
+
+/* ============================================================================
+   [3] SIMULATION — hand-rolled force-directed layout
+   Forces: pairwise repulsion (clamped, min-dist guard), spring along edges,
+   gentle gravity to (0,0), soft anchor pull for young nodes, velocity damping.
+   ============================================================================ */
+const SIM = {
+  repel: 5200,       // charge strength
+  minDist: 26,       // min distance guard (avoid NaN / explosion)
+  spring: 0.012,     // edge spring k
+  springLen: 96,     // rest length
+  gravity: 0.0016,   // pull to centre
+  anchorPull: 0.010, // young nodes drift toward cluster anchor
+  damping: 0.86,
+  maxV: 9
+};
+function stepSim(dt){
+  const nodes = G.nodes, edges = G.edges;
+  const n = nodes.length;
+  // pairwise repulsion — O(n^2), fine for <=90 nodes
+  for(let i=0;i<n;i++){
+    const a = nodes[i];
+    if(a.fixed) continue;
+    for(let j=i+1;j<n;j++){
+      const b = nodes[j];
+      let dx = a.x-b.x, dy = a.y-b.y;
+      let d2 = dx*dx+dy*dy;
+      if(d2<1) { dx=(Math.random()-0.5); dy=(Math.random()-0.5); d2=dx*dx+dy*dy+0.01; }
+      let d = Math.sqrt(d2);
+      if(d < SIM.minDist) d = SIM.minDist;       // clamp min distance
+      const f = SIM.repel / (d*d);
+      const fx = (dx/d)*f, fy=(dy/d)*f;
+      a.vx += fx; a.vy += fy;
+      if(!b.fixed){ b.vx -= fx; b.vy -= fy; }
+    }
+  }
+  // spring attraction along edges
+  for(const e of edges){
+    const a=e.sNode, b=e.tNode;
+    let dx=b.x-a.x, dy=b.y-a.y;
+    let d=Math.sqrt(dx*dx+dy*dy)||0.001;
+    const rest = e.bridge? SIM.springLen*1.6 : SIM.springLen;
+    const f = SIM.spring*(d-rest);
+    const fx=(dx/d)*f, fy=(dy/d)*f;
+    if(!a.fixed){ a.vx+=fx; a.vy+=fy; }
+    if(!b.fixed){ b.vx-=fx; b.vy-=fy; }
+  }
+  // gravity + anchor pull + integrate
+  const now = performance.now();
+  for(const p of nodes){
+    if(p.fixed){ p.vx=0; p.vy=0; continue; }
+    p.vx += -p.x*SIM.gravity;
+    p.vy += -p.y*SIM.gravity;
+    // young nodes feel their cluster anchor; fades after ~6s
+    const age = now-p.born;
+    if(p.anchor && age<6000){
+      const k = SIM.anchorPull*(1-age/6000);
+      p.vx += (p.anchor.x-p.x)*k;
+      p.vy += (p.anchor.y-p.y)*k;
+    }
+    // damping + speed clamp
+    p.vx*=SIM.damping; p.vy*=SIM.damping;
+    const sp=Math.hypot(p.vx,p.vy);
+    if(sp>SIM.maxV){ p.vx*=SIM.maxV/sp; p.vy*=SIM.maxV/sp; }
+    p.x+=p.vx; p.y+=p.vy;
+    // NaN guard
+    if(!isFinite(p.x)||!isFinite(p.y)){ p.x=(Math.random()-0.5)*100; p.y=(Math.random()-0.5)*100; p.vx=p.vy=0; }
+    // entrance animation: scale + opacity overshoot
+    if(p.scale<1){ p.scale += (1.0-p.scale)*0.10; if(p.scale>0.985)p.scale=1; }
+    if(p.opacity<1){ p.opacity += 0.06; if(p.opacity>1)p.opacity=1; }
+  }
+  // edge grow animation
+  for(const e of edges){ if(e.grow<1){ e.grow += 0.045; if(e.grow>1)e.grow=1; } }
+  // decay bridge pulse
+  if(bridgePulse>0) bridgePulse = Math.max(0, bridgePulse - 0.006);
+}
+
+/* ============================================================================
+   [4] RENDER — canvas layers: nebula, starfield, edges+particles, nodes, FX
+   ============================================================================ */
+const canvas = document.getElementById('gfx');
+const ctx = canvas.getContext('2d');
+let DPR=1, VW=0, VH=0;
+
+function resize(){
+  DPR = Math.min(window.devicePixelRatio||1, 2);
+  VW = window.innerWidth; VH = window.innerHeight;
+  canvas.width = Math.floor(VW*DPR);
+  canvas.height= Math.floor(VH*DPR);
+  canvas.style.width = VW+'px';
+  canvas.style.height= VH+'px';
+}
+window.addEventListener('resize', resize);
+
+// starfield (parallax) — cheap point sprites in screen space
+const STARS = [];
+function initStars(){
+  STARS.length=0;
+  const n = 220;
+  for(let i=0;i<n;i++) STARS.push({
+    x:Math.random(), y:Math.random(),
+    z:0.2+Math.random()*0.8,        // depth -> parallax + size
+    tw:Math.random()*Math.PI*2
+  });
+}
+initStars();
+
+// ignition bursts: ring shockwaves + particle spray when a node spawns
+const BURSTS = [];
+function spawnIgnition(node){
+  BURSTS.push({type:'ring', x:node.x, y:node.y, t:0, life:600, color:node.color, r0:node.r});
+  const spray=10;
+  for(let i=0;i<spray;i++){
+    const a=Math.random()*Math.PI*2, sp=0.6+Math.random()*1.8;
+    BURSTS.push({type:'spark', x:node.x, y:node.y, vx:Math.cos(a)*sp, vy:Math.sin(a)*sp, t:0, life:500+Math.random()*300, color:node.color});
+  }
+}
+function spawnBridgeShock(edge){
+  const mx=(edge.sNode.x+edge.tNode.x)/2, my=(edge.sNode.y+edge.tNode.y)/2;
+  BURSTS.push({type:'ring', x:mx, y:my, t:0, life:1400, color:'#FFF4CF', r0:6, big:true});
+  BURSTS.push({type:'ring', x:mx, y:my, t:-200, life:1400, color:'#FFD66B', r0:6, big:true});
+}
+
+let camIdle=0;             // idle drift accumulator
+function render(now){
+  const W=canvas.width, H=canvas.height;
+  ctx.setTransform(1,0,0,1,0,0);
+  // --- background nebula (radial) ---
+  ctx.fillStyle = '#04060D';
+  ctx.fillRect(0,0,W,H);
+  const cx=W*0.5, cy=H*0.46;
+  const neb = ctx.createRadialGradient(cx,cy,0,cx,cy,Math.max(W,H)*0.62);
+  neb.addColorStop(0,'rgba(30,46,82,0.40)');
+  neb.addColorStop(0.4,'rgba(16,26,50,0.20)');
+  neb.addColorStop(1,'rgba(4,6,13,0)');
+  ctx.fillStyle=neb; ctx.fillRect(0,0,W,H);
+
+  // dotted grid backdrop (subtle, in screen space)
+  drawGrid(W,H);
+
+  // --- starfield with parallax tied to camera ---
+  ctx.globalCompositeOperation='lighter';
+  const px = (Camera.x*0.06), py=(Camera.y*0.06);
+  for(const s of STARS){
+    const sx = ((s.x*W + px*s.z*DPR) % W + W)%W;
+    const sy = ((s.y*H + py*s.z*DPR) % H + H)%H;
+    const tw = 0.45+0.55*Math.abs(Math.sin(now*0.001+s.tw));
+    ctx.fillStyle = `rgba(160,190,230,${0.10+0.5*s.z*tw})`;
+    const r = s.z*1.5*DPR;
+    ctx.fillRect(sx, sy, r, r);
+  }
+  ctx.globalCompositeOperation='source-over';
+
+  // --- world transform (camera) ---
+  ctx.save();
+  ctx.translate(W/2, H/2);
+  ctx.scale(Camera.zoom*DPR, Camera.zoom*DPR);
+  ctx.translate(-Camera.x, -Camera.y);
+
+  // --- edges + flowing particles ---
+  drawEdges(now);
+
+  // --- ignition bursts (under nodes, additive) ---
+  drawBursts();
+
+  // --- nodes ---
+  drawNodes(now);
+
+  ctx.restore();
+}
+
+function drawGrid(W,H){
+  ctx.save();
+  ctx.globalAlpha=0.5;
+  const gap=46*DPR;
+  ctx.fillStyle='rgba(90,120,160,0.05)';
+  for(let x=(Camera.x*Camera.zoom*DPR)%gap; x<W; x+=gap){
+    for(let y=(Camera.y*Camera.zoom*DPR)%gap; y<H; y+=gap){
+      ctx.fillRect(x,y,1,1);
+    }
+  }
+  ctx.restore();
+}
+
+function isDimmed(node){
+  // hover focus dimming
+  if(hover.activeId){
+    return !(node.id===hover.activeId || hover.neighbors.has(node.id));
+  }
+  if(pinned.id){
+    return !(node.id===pinned.id || pinned.neighbors.has(node.id));
+  }
+  // legend filter
+  if(filters[node.type]===false) return true;
+  // source provenance highlight
+  if(provenance.src){
+    return node.src!==provenance.src;
+  }
+  return false;
+}
+function edgeDimmed(e){
+  if(hover.activeId) return !(e.s===hover.activeId||e.t===hover.activeId);
+  if(pinned.id) return !(e.s===pinned.id||e.t===pinned.id);
+  if(filters[e.sNode.type]===false || filters[e.tNode.type]===false) return true;
+  if(provenance.src) return e.src!==provenance.src;
+  return false;
+}
+
+function drawEdges(now){
+  ctx.globalCompositeOperation='lighter';
+  for(const e of G.edges){
+    const a=e.sNode, b=e.tNode;
+    const dim = edgeDimmed(e);
+    // grow: only draw partial line while animating in
+    const gx = a.x + (b.x-a.x)*e.grow;
+    const gy = a.y + (b.y-a.y)*e.grow;
+    // provenance edges: faint dashed filament in the source's hue (no glow stroke)
+    if(e.prov){
+      const sc = SRC_BY_ID[e.src];
+      ctx.save();
+      ctx.setLineDash([4*Camera.zoom, 5*Camera.zoom]);
+      ctx.lineDashOffset = -(now*0.02)%999;
+      ctx.strokeStyle = hexA(sc.color, dim?0.05:0.22);
+      ctx.lineWidth = 0.5*Camera.zoom;
+      ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(gx,gy); ctx.stroke();
+      ctx.restore();
+      continue;
+    }
+    // bridge edges: white-gold thick filament that pulses
+    let col, lw, glowA;
+    if(e.bridge){
+      const pulse = 0.6+0.4*Math.sin(now*0.004);
+      col = `rgba(255,239,194,${dim?0.12:0.85*pulse})`;
+      lw = (dim?0.7:1.3)*Camera.zoom;
+      glowA = dim?0.05:0.4;
+    } else {
+      col = `rgba(120,150,210,${dim?0.05:0.32})`;
+      lw = (dim?0.4:0.7)*Camera.zoom;
+      glowA = dim?0.02:0.12;
+    }
+    // soft glow under-stroke
+    ctx.strokeStyle = e.bridge?`rgba(255,214,107,${glowA})`:`rgba(90,130,200,${glowA})`;
+    ctx.lineWidth = lw*3.5;
+    ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(gx,gy); ctx.stroke();
+    // core line
+    ctx.strokeStyle=col; ctx.lineWidth=lw;
+    ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(gx,gy); ctx.stroke();
+
+    // particles flowing source->target (live data flow)
+    if(showParticles && e.grow>=0.99 && !dim){
+      const speed = 0.00018*(0.5+e.w) * (e.bridge?1.5:1);
+      for(const p of e.particles){
+        const t = ((now*speed + p.phase)%1);
+        const x = a.x + (b.x-a.x)*t;
+        const y = a.y + (b.y-a.y)*t;
+        const pc = e.bridge?'rgba(255,244,207,0.95)':'rgba(150,200,255,0.8)';
+        const pr = (e.bridge?1.7:1.2)*Camera.zoom;
+        ctx.fillStyle=pc;
+        ctx.beginPath(); ctx.arc(x,y,pr,0,Math.PI*2); ctx.fill();
+        // tiny halo
+        ctx.fillStyle=e.bridge?'rgba(255,214,107,0.25)':'rgba(120,180,255,0.18)';
+        ctx.beginPath(); ctx.arc(x,y,pr*2.4,0,Math.PI*2); ctx.fill();
+      }
+    }
+  }
+  ctx.globalCompositeOperation='source-over';
+}
+
+function drawNodes(now){
+  for(const node of G.nodes){
+    const dim = isDimmed(node);
+    const a = node.opacity * (dim?0.22:1);
+    const r = node.r * node.scale;
+    const isFocus = node.id===hover.activeId || node.id===pinned.id;
+    // bridge cluster pulse highlight
+    let pulseBoost = 0;
+    if(bridgePulse>0 && (node.cl==='soul'||node.cl==='blues'||node.cl==='rock'||node.cl==='bridge')){
+      pulseBoost = bridgePulse*0.6;
+    }
+    // bloom halo (additive)
+    ctx.globalCompositeOperation='lighter';
+    const haloR = r*(isFocus?5.5:3.6)*(1+pulseBoost);
+    const grd = ctx.createRadialGradient(node.x,node.y,0,node.x,node.y,haloR);
+    grd.addColorStop(0, node.glow+(0.55*a*(isFocus?1.4:1)).toFixed(3)+')');
+    grd.addColorStop(0.4, node.glow+(0.18*a).toFixed(3)+')');
+    grd.addColorStop(1, node.glow+'0)');
+    ctx.fillStyle=grd;
+    ctx.beginPath(); ctx.arc(node.x,node.y,haloR,0,Math.PI*2); ctx.fill();
+    ctx.globalCompositeOperation='source-over';
+
+    // core orb
+    ctx.beginPath(); ctx.arc(node.x,node.y,r,0,Math.PI*2);
+    ctx.fillStyle = node.color; ctx.globalAlpha=a; ctx.fill();
+    // bright inner core
+    ctx.globalAlpha=a;
+    ctx.beginPath(); ctx.arc(node.x-r*0.25,node.y-r*0.25,r*0.42,0,Math.PI*2);
+    ctx.fillStyle='rgba(255,255,255,0.9)'; ctx.fill();
+    // ring for source/bridge nodes
+    if(node.type==='Source' || node.cl==='bridge'){
+      ctx.lineWidth=1.2; ctx.strokeStyle='rgba(255,244,207,'+(0.7*a)+')';
+      ctx.beginPath(); ctx.arc(node.x,node.y,r+3,0,Math.PI*2); ctx.stroke();
+    }
+    if(isFocus){
+      ctx.lineWidth=1.4; ctx.strokeStyle='rgba(255,255,255,'+(0.9)+')';
+      ctx.beginPath(); ctx.arc(node.x,node.y,r+5,0,Math.PI*2); ctx.stroke();
+    }
+    ctx.globalAlpha=1;
+
+    // label
+    if(showLabels && (Camera.zoom>0.55) && !dim){
+      const fs = Math.max(8, 9.5);
+      ctx.font = `${fs}px "JetBrains Mono", monospace`;
+      ctx.textAlign='center'; ctx.textBaseline='top';
+      ctx.fillStyle = isFocus?'#FFFFFF':'rgba(199,210,224,0.82)';
+      ctx.globalAlpha = a;
+      // tiny backdrop for readability
+      const tw = ctx.measureText(node.label).width;
+      ctx.fillStyle='rgba(4,6,13,0.55)';
+      ctx.fillRect(node.x-tw/2-2, node.y+r+4, tw+4, fs+3);
+      ctx.fillStyle = isFocus?'#FFFFFF':'rgba(199,210,224,0.85)';
+      ctx.fillText(node.label, node.x, node.y+r+5.5);
+      ctx.globalAlpha=1;
+    }
+  }
+}
+
+function drawBursts(){
+  ctx.globalCompositeOperation='lighter';
+  for(let i=BURSTS.length-1;i>=0;i--){
+    const bu=BURSTS[i];
+    bu.t += 16;
+    if(bu.t<0) continue;
+    const k = bu.t/bu.life;
+    if(k>=1){ BURSTS.splice(i,1); continue; }
+    if(bu.type==='ring'){
+      const maxR = bu.big?160:48;
+      const rr = bu.r0 + k*maxR;
+      const al = (1-k)*(bu.big?0.7:0.55);
+      ctx.strokeStyle = hexA(bu.color, al);
+      ctx.lineWidth = (bu.big?2.2:1.4)*(1-k)+0.3;
+      ctx.beginPath(); ctx.arc(bu.x,bu.y,rr,0,Math.PI*2); ctx.stroke();
+    } else if(bu.type==='spark'){
+      bu.x+=bu.vx; bu.y+=bu.vy; bu.vx*=0.96; bu.vy*=0.96;
+      const al=(1-k)*0.8;
+      ctx.fillStyle=hexA(bu.color,al);
+      ctx.beginPath(); ctx.arc(bu.x,bu.y,1.6*(1-k)+0.4,0,Math.PI*2); ctx.fill();
+    }
+  }
+  ctx.globalCompositeOperation='source-over';
+}
+// convert #RRGGBB + alpha -> rgba()
+function hexA(hex, a){
+  const h=hex.replace('#','');
+  const r=parseInt(h.substr(0,2),16), g=parseInt(h.substr(2,2),16), b=parseInt(h.substr(4,2),16);
+  return `rgba(${r},${g},${b},${a})`;
+}
+
+/* ============================================================================
+   [5] CAMERA — pan/zoom transform, eased bridge move, idle auto-drift
+   World coords centred at (0,0). Screen = (world - cam)*zoom + viewportCenter.
+   ============================================================================ */
+const Camera = {
+  x:0, y:0, zoom:1,
+  tx:0, ty:0, tzoom:1, easing:false, easeT:0, easeDur:0, easeFrom:null,
+  idleTimer:0,
+  easeTo(x,y,zoom,dur){
+    this.easeFrom={x:this.x,y:this.y,zoom:this.zoom};
+    this.tx=x; this.ty=y; this.tzoom=zoom; this.easeDur=dur; this.easeT=0; this.easing=true;
+  },
+  update(dt){
+    if(this.easing){
+      this.easeT += dt;
+      let p = Math.min(1, this.easeT/this.easeDur);
+      const e = 1-Math.pow(1-p,3);     // cubic-out
+      this.x = this.easeFrom.x + (this.tx-this.easeFrom.x)*e;
+      this.y = this.easeFrom.y + (this.ty-this.easeFrom.y)*e;
+      this.zoom = this.easeFrom.zoom + (this.tzoom-this.easeFrom.zoom)*e;
+      if(p>=1) this.easing=false;
+    } else if(!drag.active && !pinned.id && playing===false && exploreMode){
+      // idle auto-drift in explore mode
+      this.idleTimer += dt;
+      if(this.idleTimer>2500){
+        this.x += Math.sin(performance.now()*0.00012)*0.10;
+        this.y += Math.cos(performance.now()*0.00010)*0.08;
+      }
+    }
+  },
+  // screen <-> world helpers
+  toWorld(sx,sy){
+    return {x:(sx-VW/2)/this.zoom + this.x, y:(sy-VH/2)/this.zoom + this.y};
+  }
+};
+
+/* ============================================================================
+   [6] INTERACTION
+   ============================================================================ */
+const hover = {activeId:null, neighbors:new Set()};
+const pinned = {id:null, neighbors:new Set()};
+const filters = {};            // type -> bool (false = filtered out)
+const provenance = {src:null}; // active source provenance highlight
+const drag = {active:false, node:null, lastX:0, lastY:0, panning:false, moved:false};
+let exploreMode = false;
+
+function neighborsOf(id){
+  const set=new Set();
+  for(const e of G.edges){
+    if(e.s===id) set.add(e.t);
+    if(e.t===id) set.add(e.s);
+  }
+  return set;
+}
+
+// nearest node to world point (within radius)
+function pickNode(wx,wy){
+  let best=null, bestD=Infinity;
+  for(const node of G.nodes){
+    if(filters[node.type]===false) continue;
+    const dx=node.x-wx, dy=node.y-wy;
+    const d=dx*dx+dy*dy;
+    const rr=(node.r+8)*(node.r+8);
+    if(d<rr && d<bestD){ best=node; bestD=d; }
+  }
+  return best;
+}
+
+const stage = document.getElementById('stage');
+const tip = document.getElementById('tip');
+
+stage.addEventListener('mousemove', e=>{
+  Camera.idleTimer=0;
+  if(drag.active){
+    if(drag.node){
+      // drag a node
+      const w=Camera.toWorld(e.clientX, e.clientY);
+      drag.node.x=w.x; drag.node.y=w.y; drag.node.vx=0; drag.node.vy=0;
+      drag.node.fixed=true;
+      drag.moved=true;
+    } else if(drag.panning){
+      Camera.x -= (e.clientX-drag.lastX)/Camera.zoom;
+      Camera.y -= (e.clientY-drag.lastY)/Camera.zoom;
+      drag.lastX=e.clientX; drag.lastY=e.clientY;
+      drag.moved=true;
+    }
+    return;
+  }
+  // hover hit-test
+  const w=Camera.toWorld(e.clientX,e.clientY);
+  const node=pickNode(w.x,w.y);
+  if(node){
+    if(hover.activeId!==node.id){
+      hover.activeId=node.id;
+      hover.neighbors=neighborsOf(node.id);
+    }
+    showTip(node, e.clientX, e.clientY);
+    showDossier(node);
+    stage.style.cursor='pointer';
+  } else {
+    if(hover.activeId){ hover.activeId=null; hover.neighbors.clear(); }
+    tip.style.display='none';
+    if(!pinned.id) hideDossier();
+    stage.style.cursor = drag.active?'grabbing':'grab';
+  }
+});
+
+stage.addEventListener('mousedown', e=>{
+  Camera.idleTimer=0;
+  const w=Camera.toWorld(e.clientX,e.clientY);
+  const node=pickNode(w.x,w.y);
+  drag.active=true; drag.moved=false;
+  drag.lastX=e.clientX; drag.lastY=e.clientY;
+  if(node){ drag.node=node; drag.panning=false; }
+  else { drag.node=null; drag.panning=true; stage.classList.add('grabbing'); }
+});
+window.addEventListener('mouseup', e=>{
+  if(drag.active){
+    if(drag.node){
+      drag.node.fixed=false;
+      if(!drag.moved){ // click = pin/focus
+        togglePin(drag.node);
+      }
+    } else if(drag.panning && !drag.moved){
+      // background click clears pin
+      clearPin();
+    }
+  }
+  drag.active=false; drag.node=null; drag.panning=false;
+  stage.classList.remove('grabbing');
+});
+
+stage.addEventListener('wheel', e=>{
+  e.preventDefault();
+  Camera.idleTimer=0;
+  const before = Camera.toWorld(e.clientX, e.clientY);
+  const factor = e.deltaY<0 ? 1.12 : 1/1.12;
+  Camera.zoom = Math.max(0.3, Math.min(3.2, Camera.zoom*factor));
+  Camera.easing=false;
+  const after = Camera.toWorld(e.clientX, e.clientY);
+  // keep cursor anchored during zoom
+  Camera.x += before.x-after.x;
+  Camera.y += before.y-after.y;
+}, {passive:false});
+
+function showTip(node,x,y){
+  tip.style.display='block';
+  tip.style.left = Math.min(x+14, VW-210)+'px';
+  tip.style.top = Math.min(y+14, VH-90)+'px';
+  tip.innerHTML = `<div class="tn">${node.label}</div>
+    <div class="tt" style="color:${node.color}">${node.type}</div>
+    <div class="tm">DEGREE ${node.degree} · ${node.y}</div>`;
+}
+function togglePin(node){
+  if(pinned.id===node.id){ clearPin(); return; }
+  pinned.id=node.id;
+  pinned.neighbors=neighborsOf(node.id);
+  Camera.easeTo(node.x, node.y, Math.max(Camera.zoom,1.2), 800);
+  showDossier(node);
+}
+function clearPin(){
+  pinned.id=null; pinned.neighbors.clear();
+  if(!hover.activeId) hideDossier();
+}
+
+/* Dossier panel */
+const dossier=document.getElementById('dossier');
+const dossierbody=document.getElementById('dossierbody');
+function showDossier(node){
+  const src=SRC_BY_ID[node.src];
+  const nbrs=[...neighborsOf(node.id)].map(id=>NODE_BY_ID[id]?NODE_BY_ID[id].label:id);
+  const shown = nbrs.slice(0,6).map(n=>`<span>${n}</span>`).join(', ');
+  dossierbody.innerHTML = `
+    <div class="dname">${node.label}</div>
+    <div class="dtype" style="color:${node.color}">${node.type}${node.y&&node.y!=='—'?(' · '+node.y):''}</div>
+    <div class="ddesc">${node.d||''}</div>
+    <div class="dmeta">INTRODUCED BY &nbsp;<b style="color:${src.color}">${src.name}</b><br>
+      DEGREE &nbsp;<b>${node.degree}</b> connections</div>
+    <div class="dconn"><div class="ct">Notable Connections</div>${shown||'<span style="color:var(--dim)">none yet</span>'}${nbrs.length>6?` <span style="color:var(--dim)">+${nbrs.length-6} more</span>`:''}</div>`;
+  dossier.classList.add('show');
+}
+function hideDossier(){ dossier.classList.remove('show'); }
+document.getElementById('dosclose').addEventListener('click',()=>{ clearPin(); hover.activeId=null; hover.neighbors.clear(); hideDossier(); });
+
+/* ---------- Legend (filters) ---------- */
+const legendbody=document.getElementById('legendbody');
+const LEGEND_LABELS={Artist:'Artist',Genre:'Genre',Instrument:'Instrument',City:'City',Label:'Label',Source:'Source / Ingest'};
+(function buildLegend(){
+  for(const t in TYPES){
+    filters[t]=true;
+    const row=document.createElement('div');
+    row.className='lrow'; row.dataset.type=t;
+    row.innerHTML=`<span class="ls" style="color:${TYPES[t].color};background:${TYPES[t].color}"></span>
+      <span class="ln">${LEGEND_LABELS[t]}</span><span class="lc" id="lc-${t}">0</span>`;
+    row.addEventListener('click',()=>{
+      filters[t]=!filters[t];
+      row.classList.toggle('off', !filters[t]);
+    });
+    legendbody.appendChild(row);
+  }
+})();
+
+/* ---------- Source feed (provenance) ---------- */
+const sourcebody=document.getElementById('sourcebody');
+(function buildSourceFeed(){
+  for(const s of SOURCES){
+    const row=document.createElement('div');
+    row.className='srow pending'; row.dataset.src=s.id;
+    row.innerHTML=`<span class="sd" style="color:${s.color};background:${s.color}"></span>
+      <span class="sn">${s.name}<b>WAVE ${s.wave} · ${s.year} · ${s.cluster.toUpperCase()}</b></span>`;
+    row.addEventListener('click',()=>{
+      // toggle provenance highlight
+      if(provenance.src===s.id){ provenance.src=null; document.querySelectorAll('.srow').forEach(r=>r.classList.remove('sel')); }
+      else {
+        provenance.src=s.id;
+        document.querySelectorAll('.srow').forEach(r=>r.classList.toggle('sel', r.dataset.src===s.id));
+      }
+    });
+    sourcebody.appendChild(row);
+  }
+})();
+
+/* ---------- Transport controls ---------- */
+const btnPlay=document.getElementById('btnPlay');
+function setPlaying(v){
+  playing=v;
+  btnPlay.innerHTML = v?'❚❚ PAUSE':'▶ PLAY';
+  document.getElementById('modeRead').textContent = v?'INGESTING':(exploreMode?'EXPLORE':'PAUSED');
+}
+btnPlay.addEventListener('click',()=>{
+  if(eventIdx>=EVENTS.length){ restart(); return; }
+  setPlaying(!playing);
+});
+document.getElementById('btnStep').addEventListener('click',()=>{
+  setPlaying(false);
+  stepOnce();
+});
+document.getElementById('btnRestart').addEventListener('click', restart);
+document.getElementById('btnBridge').addEventListener('click', replayBridge);
+document.getElementById('btnLabels').addEventListener('click',function(){
+  showLabels=!showLabels; this.classList.toggle('on',showLabels);
+});
+document.getElementById('btnParticles').addEventListener('click',function(){
+  showParticles=!showParticles; this.classList.toggle('on',showParticles);
+});
+document.querySelectorAll('#speedSeg .btn').forEach(b=>{
+  b.addEventListener('click',()=>{
+    document.querySelectorAll('#speedSeg .btn').forEach(x=>x.classList.remove('sel'));
+    b.classList.add('sel');
+    speed=parseFloat(b.dataset.spd);
+    document.getElementById('spdRead').textContent=speed.toFixed(1)+'x';
+  });
+});
+
+// info popup
+document.getElementById('infobtn').addEventListener('click',()=>document.getElementById('infopop').classList.toggle('show'));
+document.getElementById('infoclose').addEventListener('click',()=>document.getElementById('infopop').classList.remove('show'));
+
+// keyboard
+window.addEventListener('keydown',e=>{
+  if(e.code==='Space'){ e.preventDefault();
+    if(!standbyGone){ beginIngest(); return; }
+    if(eventIdx>=EVENTS.length){ restart(); } else setPlaying(!playing);
+  }
+  if(e.key==='r'||e.key==='R') restart();
+});
+
+/* ---------- Event stepping ---------- */
+function stepOnce(){
+  if(eventIdx>=EVENTS.length){ finishExplore(); return; }
+  const ev=EVENTS[eventIdx++];
+  applyEvent(ev);
+  // update bridge status text as components change (pre-bridge)
+  if(!G.bridgeFired) setBridgeStatus(false);
+  updateTelemetry();
+  updateScrubFromEvents();
+}
+function stepGroup(){
+  // step one event, but skip ahead through a 'source' marker + chain quickly
+  stepOnce();
+}
+
+/* ---------- Restart ---------- */
+function restart(){
+  // reset all state
+  G.nodes.length=0; G.edges.length=0;
+  G.nodeMap={}; G.edgeSet=new Set();
+  G.sourcesIngested=0; G.curSource=null; G.curYear=SOURCES[0].year; G.bridgeFired=false;
+  UF.parent={};
+  BURSTS.length=0;
+  eventIdx=0; bridgePulse=0; exploreMode=false;
+  hover.activeId=null; hover.neighbors.clear(); clearPin();
+  provenance.src=null;
+  document.querySelectorAll('.srow').forEach(r=>{r.classList.add('pending');r.classList.remove('active','sel');});
+  logfeed.innerHTML='';
+  Camera.easeTo(0,0,1,700);
+  setStage(0);
+  setBridgeStatus(false);
+  updateTelemetry();
+  updateScrubFromEvents();
+  document.getElementById('srcRead').textContent='—';
+  log('SYSTEM &gt; observatory reset. <em>awaiting ingest</em>.', 'evt');
+  setPlaying(true);
+}
+
+/* ---------- Replay just the bridge moment (Wave 4) ---------- */
+function replayBridge(){
+  // find the index of the first bridge edge event
+  let bridgeStart=-1;
+  for(let i=0;i<EVENTS.length;i++){ if(EVENTS[i].op==='source' && SRC_BY_ID[EVENTS[i].src].wave===4){ bridgeStart=i; break; } }
+  if(bridgeStart<0) return;
+  // ensure all events up to (not including) wave-4 source are applied, instantly
+  if(eventIdx < bridgeStart){
+    // fast-forward silently to just before wave 4
+    while(eventIdx<bridgeStart){ applyEvent(EVENTS[eventIdx++]); }
+    G.bridgeFired=false;
+    updateTelemetry();
+  } else {
+    // rewind: rebuild up to just before wave 4
+    rebuildTo(bridgeStart);
+  }
+  setStage(4);
+  setPlaying(true);
+  log('REPLAY &gt; <em>re-running the Muscle Shoals bridge</em>', 'bridge');
+}
+
+/* Rebuild graph deterministically up to event index `target` (for scrub/rewind).
+   Cheaper than per-event animation; we snap positions but keep entrance anims off. */
+function rebuildTo(target){
+  // reset
+  G.nodes.length=0; G.edges.length=0; G.nodeMap={}; G.edgeSet=new Set();
+  G.sourcesIngested=0; G.bridgeFired=false; UF.parent={}; BURSTS.length=0;
+  let lastWave=0;
+  for(let i=0;i<target;i++){
+    const ev=EVENTS[i];
+    if(ev.op==='source'){
+      const s=SRC_BY_ID[ev.src]; G.sourcesIngested++; G.curSource=s; G.curYear=s.year; lastWave=s.wave;
+      markSourceActive(s.id);
+    } else if(ev.op==='addNode'){
+      const def=NODE_BY_ID[ev.id], s=SRC_BY_ID[ev.src];
+      const node=makeNode(def, s, true);   // settled = no entrance anim
+      G.nodes.push(node); G.nodeMap[node.id]=node; UF.add(node.id);
+    } else if(ev.op==='addEdge'){
+      const a=G.nodeMap[ev.s], b=G.nodeMap[ev.t];
+      if(a&&b && !G.edgeSet.has(EDGE_KEY(ev.s,ev.t))){
+        if(!ev.prov) UF.union(ev.s,ev.t);
+        if(ev.bridge) G.bridgeFired=true;
+        G.edges.push({s:ev.s,t:ev.t,sNode:a,tNode:b,w:ev.w||1,label:ev.label||'',src:ev.src,bridge:!!ev.bridge,prov:!!ev.prov,grow:1,born:performance.now()-2000,particles:makeParticles(ev.w||1,ev.bridge)});
+        G.edgeSet.add(EDGE_KEY(ev.s,ev.t)); a.degree++; b.degree++;
+      }
+    }
+  }
+  eventIdx=target;
+  setStage(lastWave);
+  setBridgeStatus(G.bridgeFired);
+  updateTelemetry();
+  // settle a few sim steps so it doesn't look frozen
+  for(let k=0;k<40;k++) stepSim(16);
+  // update active source rows
+  document.querySelectorAll('.srow').forEach(r=>{
+    const s=SRC_BY_ID[r.dataset.src];
+    r.classList.toggle('pending', s.wave>lastWave);
+    r.classList.remove('active');
+  });
+}
+
+/* ---------- Timeline scrubber ---------- */
+const scrub=document.getElementById('scrub');
+const scrubfill=document.getElementById('scrubfill');
+const scrubknob=document.getElementById('scrubknob');
+const yearread=document.getElementById('yearread');
+
+// place wave tick marks along the timeline
+(function buildTicks(){
+  // tick position = fraction of events at which each source begins
+  const srcEventIdx={};
+  for(let i=0;i<EVENTS.length;i++){ if(EVENTS[i].op==='source'){ srcEventIdx[EVENTS[i].src]=i; } }
+  for(const s of SOURCES){
+    const frac = srcEventIdx[s.id]/(EVENTS.length-1);
+    const tick=document.createElement('div'); tick.className='tick'; tick.style.left=(frac*100)+'%';
+    const lbl=document.createElement('div'); lbl.className='ticklbl'; lbl.style.left=(frac*100)+'%'; lbl.textContent=s.year;
+    scrub.appendChild(tick); scrub.appendChild(lbl);
+  }
+})();
+
+function updateScrubFromEvents(){
+  const frac = EVENTS.length>1 ? eventIdx/EVENTS.length : 0;
+  scrubfill.style.width=(frac*100)+'%';
+  scrubknob.style.left=(frac*100)+'%';
+  yearread.textContent = G.curYear? "'"+String(G.curYear).slice(-2) : '—';
+  if(G.curSource) yearread.textContent = G.curSource.year;
+}
+
+let scrubbing=false;
+function scrubToClientX(clientX){
+  const rect=scrub.getBoundingClientRect();
+  let frac=(clientX-rect.left)/rect.width;
+  frac=Math.max(0,Math.min(1,frac));
+  const target=Math.round(frac*EVENTS.length);
+  setPlaying(false);
+  rebuildTo(Math.max(0,Math.min(EVENTS.length,target)));
+  updateScrubFromEvents();
+}
+scrub.addEventListener('mousedown',e=>{ scrubbing=true; scrubToClientX(e.clientX); e.stopPropagation(); });
+window.addEventListener('mousemove',e=>{ if(scrubbing) scrubToClientX(e.clientX); });
+window.addEventListener('mouseup',()=>{ scrubbing=false; });
+
+/* ---------- Explore mode handoff ---------- */
+function finishExplore(){
+  if(exploreMode) return;
+  exploreMode=true;
+  setPlaying(false);
+  setStage(6);
+  document.getElementById('modeRead').textContent='EXPLORE';
+  log('SYSTEM &gt; assembly complete. <em>free-explore enabled</em>.', 'evt');
+}
+
+/* ============================================================================
+   MAIN LOOP + boot
+   ============================================================================ */
+let standbyGone=false;
+function beginIngest(){
+  if(standbyGone) return;
+  standbyGone=true;
+  document.getElementById('standby').classList.add('gone');
+  G.curYear=SOURCES[0].year;
+  setPlaying(true);
+  log('SYSTEM &gt; observatory online. <em>beginning ingest</em>.', 'evt');
+}
+document.getElementById('beginBtn').addEventListener('click', beginIngest);
+
+let lastT=performance.now();
+function loop(now){
+  const dt=Math.min(48, now-lastT); lastT=now;
+
+  // paced event ingestion while playing
+  if(playing && standbyGone){
+    if(eventIdx>=EVENTS.length){ finishExplore(); }
+    else {
+      const interval = BASE_INTERVAL/speed;
+      if(now-lastEventTime > interval || reduceMotion){
+        lastEventTime=now;
+        stepOnce();
+      }
+    }
+  }
+
+  // simulation
+  if(!reduceMotion){
+    stepSim(dt);
+  } else {
+    // still settle a bit for layout even with reduced motion
+    for(let k=0;k<3;k++) stepSim(16);
+  }
+
+  Camera.update(dt);
+  render(now);
+  requestAnimationFrame(loop);
+}
+
+/* ---------- typewriter boot for header + standby ---------- */
+function typewriter(el, text, speed){
+  el.textContent='';
+  let i=0;
+  const id=setInterval(()=>{
+    el.textContent = text.slice(0,++i);
+    if(i>=text.length){ clearInterval(id); el.classList.remove('typewrite'); }
+  }, speed);
+}
+
+/* ---------- init ---------- */
+function init(){
+  resize();
+  // boot HUD text
+  const ttlEl=document.getElementById('ttl');
+  ttlEl.classList.remove('typewrite'); // it has HTML; type the standby line instead
+  if(!reduceMotion){
+    typewriter(document.getElementById('standbyttl'), '// THE KNOWLEDGE ASSEMBLY OBSERVATORY //', 28);
+  }
+  setStage(0);
+  setBridgeStatus(false);
+  updateTelemetry();
+  updateScrubFromEvents();
+  document.getElementById('spdRead').textContent='1.0x';
+  // seed a couple of standby log lines
+  log('BOOT &gt; HUD frame online', 'evt');
+  log('BOOT &gt; force-sim ready · particle pool armed', '');
+  log('IDLE &gt; press <em>BEGIN INGEST</em> to assemble graph', '');
+
+  if(reduceMotion){
+    // reduced motion: skip standby, jump-cut waves on play
+    document.getElementById('standby').classList.add('gone');
+    standbyGone=true;
+    log('A11Y &gt; reduced-motion: bursts &amp; particles disabled', 'evt');
+  }
+  requestAnimationFrame(loop);
+}
+init();
+</script>
+</body>
+</html>

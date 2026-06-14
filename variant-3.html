@@ -1,0 +1,1568 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SUBSTRATE.idx — A Live Knowledge-Graph Indexer</title>
+<style>
+/* ============================================================
+   SUBSTRATE.idx — retro-futuristic blueprint / mainframe boot
+   All styling inline. System monospace stack only.
+   ============================================================ */
+:root{
+  --bg:#0a1626;
+  --surface:#0e1c30;
+  --edge:#1f7a8c;
+  --accent:#39ff14;
+  --text:#c8f7e8;
+  --paper:#39ff14;
+  --researcher:#34d6ff;
+  --institution:#ffd166;
+  --technique:#ff7ad9;
+  --bridge:#ffffff;
+  --grid:rgba(31,122,140,0.16);
+  --gridStrong:rgba(31,122,140,0.30);
+  --hair:rgba(200,247,232,0.20);
+  --mono: "Berkeley Mono","JetBrains Mono","IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box;}
+html,body{height:100%;margin:0;}
+body{
+  background:var(--bg);
+  color:var(--text);
+  font-family:var(--mono);
+  font-size:13px;
+  line-height:1.4;
+  overflow:hidden;
+  -webkit-font-smoothing:antialiased;
+}
+/* CRT scanline + vignette overlay across whole app */
+#crt{
+  position:fixed; inset:0; pointer-events:none; z-index:9000;
+  background:
+    repeating-linear-gradient(0deg, rgba(0,0,0,0.0) 0px, rgba(0,0,0,0.0) 2px, rgba(0,0,0,0.10) 3px, rgba(0,0,0,0.0) 4px);
+  mix-blend-mode:multiply;
+}
+#vignette{
+  position:fixed; inset:0; pointer-events:none; z-index:8999;
+  box-shadow: inset 0 0 220px rgba(0,0,0,0.65), inset 0 0 60px rgba(0,0,0,0.4);
+}
+
+/* ---------- LAYOUT ---------- */
+#app{display:flex; flex-direction:column; height:100vh; width:100vw;}
+header#topbar{
+  flex:0 0 auto;
+  display:flex; align-items:baseline; gap:18px;
+  padding:8px 16px;
+  border-bottom:1px solid var(--hair);
+  background:linear-gradient(180deg, rgba(57,255,20,0.04), transparent);
+}
+#title{
+  font-size:18px; letter-spacing:2px; color:var(--accent); font-weight:700;
+  text-shadow:0 0 6px rgba(57,255,20,0.55), 1px 0 rgba(255,0,80,0.25), -1px 0 rgba(0,180,255,0.25);
+  animation:flicker 7s infinite steps(1);
+}
+@keyframes flicker{
+  0%,96%,100%{opacity:1;} 97%{opacity:0.86;} 98%{opacity:1;} 99%{opacity:0.92;}
+}
+#subtitle{font-size:11px; color:rgba(200,247,232,0.6); letter-spacing:0.5px;}
+#topbar .spacer{flex:1;}
+#topbar .meta{font-size:10px; color:rgba(200,247,232,0.45); letter-spacing:1px; text-align:right;}
+
+#main{flex:1 1 auto; display:flex; min-height:0;}
+
+/* LEFT RAIL — build log */
+#leftrail{
+  flex:0 0 360px; max-width:38vw;
+  display:flex; flex-direction:column;
+  border-right:1px solid var(--hair);
+  background:var(--surface);
+  min-height:0;
+}
+#logHeader{
+  flex:0 0 auto; padding:6px 10px; font-size:10px; letter-spacing:1px;
+  color:rgba(200,247,232,0.55); border-bottom:1px solid var(--hair);
+  display:flex; align-items:center; gap:8px;
+}
+#logHeader .dot{width:7px;height:7px;border-radius:50%;background:var(--accent);box-shadow:0 0 6px var(--accent);animation:pulse 1.4s infinite;}
+@keyframes pulse{0%,100%{opacity:1;}50%{opacity:0.3;}}
+#grepWrap{flex:0 0 auto; display:flex; align-items:center; gap:6px; padding:5px 8px; border-bottom:1px solid var(--hair);}
+#grepWrap label{color:var(--accent); font-size:11px;}
+#grep{
+  flex:1; background:rgba(10,22,38,0.8); border:1px solid var(--hair); color:var(--text);
+  font-family:var(--mono); font-size:11px; padding:3px 6px; outline:none;
+}
+#grep:focus{border-color:var(--accent); box-shadow:0 0 6px rgba(57,255,20,0.3);}
+#log{
+  flex:1 1 auto; overflow-y:auto; padding:8px 10px 40px 10px;
+  font-size:11.5px; line-height:1.55;
+  scrollbar-width:thin; scrollbar-color:var(--edge) transparent;
+}
+#log::-webkit-scrollbar{width:8px;}
+#log::-webkit-scrollbar-thumb{background:var(--edge); border-radius:4px;}
+.logline{
+  white-space:pre-wrap; word-break:break-word; padding:1px 4px; margin:1px 0; cursor:pointer;
+  border-left:2px solid transparent; transition:background 0.12s, border-color 0.12s;
+}
+.logline:hover{background:rgba(57,255,20,0.07); border-left-color:var(--accent);}
+.logline .ts{color:rgba(52,214,255,0.7);}
+.logline .prose{color:var(--text);}
+.logline .tag{color:rgba(200,247,232,0.5);}
+.logline.boot .prose{color:rgba(200,247,232,0.65);}
+.logline.alert{
+  background:var(--accent); color:#06140a; font-weight:700; border-left-color:#fff;
+  text-shadow:none;
+}
+.logline.alert .ts, .logline.alert .prose, .logline.alert .tag{color:#06140a;}
+.logline.flash{animation:flashLine 0.9s ease-out;}
+@keyframes flashLine{0%{background:rgba(57,255,20,0.55);}100%{background:transparent;}}
+.logline.grepHit{background:rgba(52,214,255,0.12);}
+.logline.grepDim{opacity:0.18;}
+#cursor{display:inline-block; width:8px; height:13px; background:var(--accent); vertical-align:-2px; box-shadow:0 0 5px var(--accent); animation:blink 1s steps(1) infinite;}
+@keyframes blink{0%,50%{opacity:1;}51%,100%{opacity:0;}}
+
+/* RIGHT — graph canvas */
+#stage{flex:1 1 auto; position:relative; min-width:0; overflow:hidden; background:var(--bg);}
+#graph{display:block; width:100%; height:100%;}
+
+/* registration crop marks */
+.crop{position:absolute; width:22px; height:22px; pointer-events:none; z-index:30;}
+.crop::before,.crop::after{content:""; position:absolute; background:rgba(200,247,232,0.4);}
+.crop::before{width:22px;height:1px;} .crop::after{width:1px;height:22px;}
+.crop.tl{top:10px;left:10px;} .crop.tl::before{top:0;left:0;} .crop.tl::after{top:0;left:0;}
+.crop.tr{top:10px;right:10px;} .crop.tr::before{top:0;right:0;} .crop.tr::after{top:0;right:0;}
+.crop.bl{bottom:10px;left:10px;} .crop.bl::before{bottom:0;left:0;} .crop.bl::after{bottom:0;left:0;}
+.crop.br{bottom:10px;right:10px;} .crop.br::before{bottom:0;right:0;} .crop.br::after{bottom:0;right:0;}
+
+/* title-block bottom-right */
+#titleblock{
+  position:absolute; bottom:46px; right:14px; z-index:35;
+  border:1px solid var(--hair); background:rgba(10,22,38,0.78);
+  font-size:9.5px; letter-spacing:0.6px; color:rgba(200,247,232,0.85);
+  pointer-events:none; backdrop-filter:blur(1px);
+}
+#titleblock table{border-collapse:collapse;}
+#titleblock td{border:1px solid var(--hair); padding:2px 7px; white-space:nowrap;}
+#titleblock td.k{color:rgba(200,247,232,0.5);}
+#titleblock td.v{color:var(--accent);}
+
+/* stat readout top-left of canvas */
+#stats{
+  position:absolute; top:38px; left:38px; z-index:35;
+  border:1px solid var(--hair); background:rgba(10,22,38,0.78);
+  padding:8px 10px; font-size:10px; letter-spacing:0.5px; pointer-events:none;
+  min-width:150px;
+}
+#stats .row{display:flex; justify-content:space-between; gap:14px; padding:1px 0;}
+#stats .k{color:rgba(200,247,232,0.5);}
+#stats .v{color:var(--accent); text-shadow:0 0 5px rgba(57,255,20,0.4);}
+#stats .v.warn{color:var(--institution); text-shadow:0 0 5px rgba(255,209,102,0.4);}
+#stats .narr{margin-top:6px; padding-top:6px; border-top:1px solid var(--hair); color:var(--researcher); font-size:9.5px; max-width:200px; letter-spacing:0;}
+
+/* legend top-right of canvas */
+#legend{
+  position:absolute; top:38px; right:14px; z-index:35;
+  border:1px solid var(--hair); background:rgba(10,22,38,0.78);
+  padding:6px 8px; font-size:10px; letter-spacing:0.5px;
+}
+#legend .lh{color:rgba(200,247,232,0.5); margin-bottom:4px; font-size:9px;}
+.legchip{display:flex; align-items:center; gap:7px; padding:2px 3px; cursor:pointer; user-select:none; opacity:1; transition:opacity 0.15s;}
+.legchip:hover{background:rgba(57,255,20,0.06);}
+.legchip.off{opacity:0.3;}
+.legchip .swatch{width:12px;height:12px;border:1.5px solid; background:transparent; flex:0 0 auto;}
+.legchip .swatch.sq{border-radius:0;} .legchip .swatch.ring{border-radius:50%;}
+.legchip .ct{margin-left:auto; color:rgba(200,247,232,0.45); font-size:9px;}
+
+/* node detail callout */
+#callout{
+  position:absolute; z-index:60; pointer-events:none; display:none;
+  border:1px solid var(--accent); background:rgba(10,22,38,0.95);
+  padding:8px 10px; max-width:260px; font-size:10.5px; letter-spacing:0.3px;
+  box-shadow:0 0 18px rgba(0,0,0,0.6);
+}
+#callout .ctitle{color:var(--accent); font-weight:700; letter-spacing:0.5px; margin-bottom:3px; text-transform:uppercase; font-size:11px;}
+#callout .ctype{font-size:9px; letter-spacing:1px; text-transform:uppercase;}
+#callout .crow{color:rgba(200,247,232,0.7); margin-top:2px;}
+#callout .canno{margin-top:5px; padding-top:4px; border-top:1px solid var(--hair); color:rgba(200,247,232,0.9); font-style:italic; line-height:1.45;}
+
+/* lineage side readout */
+#lineage{
+  position:absolute; bottom:46px; left:14px; z-index:35; display:none;
+  border:1px solid var(--accent); background:rgba(10,22,38,0.9);
+  padding:8px 10px; font-size:10px; max-width:240px;
+}
+#lineage .lt{color:var(--accent); font-weight:700; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:3px;}
+#lineage .lr{color:rgba(200,247,232,0.8); padding:1px 0; display:flex; justify-content:space-between; gap:10px;}
+#lineage .lr .lv{color:var(--researcher);}
+#lineage .lhint{margin-top:4px; font-size:9px; color:rgba(200,247,232,0.45);}
+
+/* ---------- BOTTOM TRANSPORT ---------- */
+#transport{
+  flex:0 0 auto; display:flex; align-items:center; gap:12px;
+  padding:7px 14px; border-top:1px solid var(--hair);
+  background:var(--surface);
+}
+.btn{
+  font-family:var(--mono); font-size:12px; letter-spacing:0.5px;
+  background:rgba(10,22,38,0.8); color:var(--text);
+  border:1px solid var(--hair); padding:4px 10px; cursor:pointer;
+  text-transform:uppercase; transition:all 0.12s;
+}
+.btn:hover{border-color:var(--accent); color:var(--accent); box-shadow:0 0 7px rgba(57,255,20,0.25);}
+.btn:active{transform:translateY(1px);}
+.btn.on{background:var(--accent); color:#06140a; border-color:var(--accent);}
+.btn.bridge{border-color:var(--bridge); color:#fff;}
+.btn.bridge:hover{box-shadow:0 0 9px rgba(255,255,255,0.4);}
+#speedWrap, #labelWrap{display:flex; align-items:center; gap:6px; font-size:10px; color:rgba(200,247,232,0.6); letter-spacing:0.5px;}
+#speed{accent-color:var(--accent);}
+#transport .grow{flex:1; display:flex; align-items:center; gap:10px; min-width:120px;}
+#timeWrap{flex:1; display:flex; flex-direction:column; gap:2px; min-width:200px;}
+#waveLabels{display:flex; justify-content:space-between; font-size:8.5px; color:rgba(200,247,232,0.4); letter-spacing:0.5px;}
+#waveLabels span{cursor:pointer;}
+#waveLabels span:hover{color:var(--accent);}
+#scrubWrap{position:relative; height:18px;}
+#scrub{
+  -webkit-appearance:none; appearance:none; width:100%; height:6px; margin:6px 0;
+  background:linear-gradient(90deg, rgba(31,122,140,0.5), rgba(31,122,140,0.5));
+  border:1px solid var(--hair); outline:none; cursor:pointer;
+}
+#scrub::-webkit-slider-thumb{
+  -webkit-appearance:none; appearance:none; width:10px; height:18px;
+  background:var(--accent); border:1px solid #fff; cursor:grab; box-shadow:0 0 8px rgba(57,255,20,0.6);
+}
+#scrub::-moz-range-thumb{width:10px; height:18px; background:var(--accent); border:1px solid #fff; cursor:grab;}
+.tick{position:absolute; top:0; width:1px; height:18px; background:rgba(255,209,102,0.6); pointer-events:none;}
+#clockReadout{font-size:9.5px; color:rgba(200,247,232,0.5); letter-spacing:0.5px; min-width:88px; text-align:right;}
+
+/* COLD-BOOT overlay */
+#boot{
+  position:absolute; inset:0; z-index:200; display:flex; align-items:center; justify-content:center;
+  background:rgba(10,22,38,0.55); backdrop-filter:blur(1px);
+}
+#bootbox{
+  border:1px solid var(--accent); background:rgba(10,22,38,0.92); padding:22px 30px; text-align:center;
+  box-shadow:0 0 30px rgba(57,255,20,0.25);
+}
+#bootbox .bt{color:var(--accent); font-size:14px; letter-spacing:2px; margin-bottom:10px; text-shadow:0 0 8px rgba(57,255,20,0.5);}
+#bootbox .bl{font-size:10.5px; color:rgba(200,247,232,0.7); margin:3px 0;}
+#bootbox .bl .ok{color:var(--accent);}
+#startBtn{
+  margin-top:16px; font-size:13px; letter-spacing:2px; padding:8px 20px;
+  background:transparent; border:1px solid var(--accent); color:var(--accent);
+  cursor:pointer; font-family:var(--mono); text-transform:uppercase;
+  animation:pulseBtn 1.6s infinite;
+}
+@keyframes pulseBtn{0%,100%{box-shadow:0 0 4px rgba(57,255,20,0.3);}50%{box-shadow:0 0 16px rgba(57,255,20,0.7);}}
+#startBtn:hover{background:var(--accent); color:#06140a;}
+
+/* "what is this" note */
+#helpToggle{position:absolute; bottom:8px; left:14px; z-index:36;}
+#helpPanel{
+  position:absolute; bottom:46px; left:14px; z-index:80; display:none;
+  border:1px solid var(--hair); background:rgba(10,22,38,0.96); padding:12px 14px;
+  max-width:380px; font-size:10.5px; line-height:1.6; color:rgba(200,247,232,0.85);
+}
+#helpPanel h4{margin:0 0 6px; color:var(--accent); font-size:11px; letter-spacing:1px;}
+#helpPanel p{margin:0 0 7px;}
+#helpPanel .kbd{color:var(--researcher);}
+
+@media (max-width:1100px){
+  #leftrail{flex-basis:280px;}
+  #stats{display:none;}
+}
+@media (max-width:760px){
+  #leftrail{flex-basis:0; display:none;}
+  #legend{font-size:8px;}
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <header id="topbar">
+    <div id="title">SUBSTRATE.idx</div>
+    <div id="subtitle">// LIVE KNOWLEDGE-GRAPH INDEXER &nbsp;—&nbsp; watch the index compile itself</div>
+    <div class="spacer"></div>
+    <div class="meta" id="topMeta">CORPUS: arxiv · proceedings · archives<br>DOMAIN: lineage of modern AI · 1943–2024</div>
+  </header>
+
+  <div id="main">
+    <!-- LEFT: build log teletype -->
+    <aside id="leftrail">
+      <div id="logHeader"><span class="dot"></span> BUILD LOG :: substrate.idx/var/log/compile.tty</div>
+      <div id="grepWrap"><label>grep&gt;</label><input id="grep" type="text" placeholder="filter log / pulse nodes ( / )" autocomplete="off" spellcheck="false"></div>
+      <div id="log" aria-live="polite" role="log"></div>
+    </aside>
+
+    <!-- RIGHT: graph plotter -->
+    <section id="stage">
+      <canvas id="graph"></canvas>
+      <div class="crop tl"></div><div class="crop tr"></div><div class="crop bl"></div><div class="crop br"></div>
+
+      <div id="stats">
+        <div class="row"><span class="k">NODES</span><span class="v" id="sNodes">0</span></div>
+        <div class="row"><span class="k">EDGES</span><span class="v" id="sEdges">0</span></div>
+        <div class="row"><span class="k">AVG DEG</span><span class="v" id="sDeg">0.00</span></div>
+        <div class="row"><span class="k">DENSITY</span><span class="v" id="sDens">0.000</span></div>
+        <div class="row"><span class="k">SOURCES</span><span class="v" id="sSrc">0</span></div>
+        <div class="row"><span class="k">COMPONENTS</span><span class="v warn" id="sComp">0</span></div>
+        <div class="narr" id="narr">awaiting cold boot…</div>
+      </div>
+
+      <div id="legend"><div class="lh">ENTITY TYPES — click to isolate</div></div>
+
+      <div id="callout"></div>
+      <div id="lineage"></div>
+
+      <div id="titleblock">
+        <table>
+          <tr><td class="k">PROJECT</td><td class="v">SUBSTRATE.idx</td></tr>
+          <tr><td class="k">SHEET</td><td class="v">1 OF 1</td></tr>
+          <tr><td class="k">REV</td><td class="v" id="tbRev">2024.06</td></tr>
+          <tr><td class="k">SCALE</td><td class="v">1:1</td></tr>
+        </table>
+      </div>
+
+      <button class="btn" id="helpToggle" style="font-size:9px;">? WHAT IS THIS</button>
+      <div id="helpPanel">
+        <h4>WHAT IS A KNOWLEDGE GRAPH?</h4>
+        <p>A knowledge graph stores facts as <b>nodes</b> (entities: people, papers, institutions, techniques) connected by <b>edges</b> (relationships: wrote, cites, introduced, funded).</p>
+        <p>SUBSTRATE.idx is a mock archival indexer. It "crawls" sources one at a time. Each source is parsed into entities and relations, which the plotter inks onto the sheet live. <b>Every line in the build log is a real handle to a node or edge on the graph</b> — hover a line to light it up, hover a node to flash its line.</p>
+        <p>The story: two AI research traditions grow up separately (connectionist vs. statistical NLP) until <b>"Attention Is All You Need" (2017)</b> cites both — bridging the cut and fusing the graph into one connected component.</p>
+        <p><span class="kbd">SPACE</span> play/pause · <span class="kbd">←/→</span> step waves · <span class="kbd">R</span> replay · <span class="kbd">/</span> focus search</p>
+      </div>
+
+      <!-- cold boot -->
+      <div id="boot">
+        <div id="bootbox">
+          <div class="bt">SUBSTRATE.idx v2.4</div>
+          <div class="bl">initializing index… <span class="ok">OK</span></div>
+          <div class="bl">mounting corpus [arxiv] <span class="ok">OK</span></div>
+          <div class="bl">mounting corpus [proceedings] <span class="ok">OK</span></div>
+          <div class="bl">mounting corpus [archives] <span class="ok">OK</span></div>
+          <div class="bl">reconstructing field family-tree…</div>
+          <button id="startBtn">▶ PRESS ENTER · BEGIN COMPILE</button>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- BOTTOM TRANSPORT -->
+  <div id="transport">
+    <button class="btn" id="playBtn">▶ PLAY</button>
+    <button class="btn" id="stepBtn">⏭ STEP</button>
+    <button class="btn" id="restartBtn">⟲ RESTART</button>
+    <button class="btn bridge" id="bridgeBtn">◈ BRIDGE LENS</button>
+    <div id="speedWrap">SPD<input id="speed" type="range" min="0.25" max="4" step="0.25" value="1" style="width:80px;"><span id="speedV">1.0×</span></div>
+    <div id="labelWrap"><button class="btn on" id="labelBtn" style="font-size:10px;">LABELS</button></div>
+    <div id="timeWrap">
+      <div id="waveLabels">
+        <span data-w="0">00·BOOT</span><span data-w="1">01·SEED</span><span data-w="2">02·2ND SCHOOL</span><span data-w="3">03·REVIVAL</span><span data-w="4">04·BRIDGE</span><span data-w="5">05·STEADY</span>
+      </div>
+      <div id="scrubWrap"><input id="scrub" type="range" min="0" max="1000" step="1" value="0"></div>
+    </div>
+    <div id="clockReadout">t+00.0s</div>
+  </div>
+</div>
+<div id="crt"></div>
+<div id="vignette"></div>
+
+<script>
+"use strict";
+/* ============================================================
+   SUBSTRATE.idx
+   Sections: 1) DATA  2) BUILD SCRIPT (ingest events)
+   3) SIMULATION  4) RENDER  5) GROWTH CONTROLLER (clock)
+   6) INTERACTIONS  7) BOOTSTRAP
+   ============================================================ */
+
+const REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* ---------- TYPE → COLOR + SHAPE ---------- */
+const TYPE = {
+  paper:       {color:'#39ff14', shape:'square', label:'PAPER'},
+  researcher:  {color:'#34d6ff', shape:'ring',   label:'RESEARCHER'},
+  institution: {color:'#ffd166', shape:'square', label:'INSTITUTION'},
+  technique:   {color:'#ff7ad9', shape:'ring',   label:'TECHNIQUE'},
+  bridge:      {color:'#ffffff', shape:'square', label:'BRIDGE'}
+};
+
+/* ============================================================
+   1) DATA — the intellectual lineage of modern AI, 1943–2024.
+   cluster: 'A' connectionist/symbolic | 'B' statistical NLP | 'X' bridge
+   Each node positioned by cluster so growth waves tell a story.
+   ============================================================ */
+const NODES = [
+  // ---- CLUSTER A : SYMBOLIC / CONNECTIONIST FOUNDATIONS (top-left) ----
+  {id:'mcculloch_pitts', label:'McCulloch–Pitts Neuron', type:'paper', year:1943, cluster:'A', citations:9800,
+    anno:'"A Logical Calculus of Ideas Immanent in Nervous Activity" — first mathematical model of a neuron.'},
+  {id:'mcculloch', label:'Warren McCulloch', type:'researcher', year:1943, cluster:'A', citations:0, anno:'Neurophysiologist; co-founded the formal neuron.'},
+  {id:'pitts', label:'Walter Pitts', type:'researcher', year:1943, cluster:'A', citations:0, anno:'Logician; modeled neural computation as logic.'},
+  {id:'mit', label:'MIT', type:'institution', year:1943, cluster:'A', citations:0, anno:'Hub of early cybernetics and AI research.'},
+  {id:'dartmouth_ws', label:'Dartmouth Workshop', type:'paper', year:1956, cluster:'A', citations:7200,
+    anno:'1956 proposal that coined "artificial intelligence" and launched the field.'},
+  {id:'mccarthy', label:'John McCarthy', type:'researcher', year:1956, cluster:'A', citations:0, anno:'Named "AI"; invented LISP.'},
+  {id:'minsky', label:'Marvin Minsky', type:'researcher', year:1956, cluster:'A', citations:0, anno:'Co-founder of MIT AI Lab; perceptron skeptic.'},
+  {id:'dartmouth', label:'Dartmouth College', type:'institution', year:1956, cluster:'A', citations:0, anno:'Site of the founding 1956 summer workshop.'},
+  {id:'perceptron', label:'Perceptron', type:'paper', year:1958, cluster:'A', citations:14000,
+    anno:'Rosenblatt\'s trainable linear classifier — first learning machine.'},
+  {id:'rosenblatt', label:'Frank Rosenblatt', type:'researcher', year:1958, cluster:'A', citations:0, anno:'Built the Mark I Perceptron at Cornell.'},
+  {id:'cornell', label:'Cornell Aero Lab', type:'institution', year:1958, cluster:'A', citations:0, anno:'Funded the Perceptron hardware.'},
+  {id:'perceptrons_book', label:'Perceptrons (1969)', type:'paper', year:1969, cluster:'A', citations:11200,
+    anno:'Minsky & Papert proved single-layer limits — froze funding ("AI winter").'},
+  {id:'papert', label:'Seymour Papert', type:'researcher', year:1969, cluster:'A', citations:0, anno:'Co-author of Perceptrons; Logo pioneer.'},
+  {id:'gradient_descent', label:'Gradient Descent', type:'technique', year:1951, cluster:'A', citations:0, anno:'Optimization workhorse underlying all training.'},
+
+  // ---- CLUSTER B : STATISTICAL SEQUENCE / LANGUAGE MODELING (bottom-right) ----
+  {id:'shannon', label:'Shannon Info Theory', type:'paper', year:1948, cluster:'B', citations:120000,
+    anno:'"A Mathematical Theory of Communication" — entropy & the bit; basis of language modeling.'},
+  {id:'claude_shannon', label:'Claude Shannon', type:'researcher', year:1948, cluster:'B', citations:0, anno:'Founder of information theory.'},
+  {id:'bell_labs', label:'Bell Labs', type:'institution', year:1948, cluster:'B', citations:0, anno:'Birthplace of information theory & speech research.'},
+  {id:'ngram', label:'n-gram Language Models', type:'technique', year:1980, cluster:'B', citations:8600, anno:'Predict next word from prior n−1 — statistical NLP staple.'},
+  {id:'jelinek', label:'Frederick Jelinek', type:'researcher', year:1980, cluster:'B', citations:0, anno:'"Every time I fire a linguist, accuracy goes up." Led IBM speech.'},
+  {id:'ibm', label:'IBM Research', type:'institution', year:1980, cluster:'B', citations:0, anno:'Pioneered statistical speech & translation.'},
+  {id:'hmm', label:'Hidden Markov Models', type:'technique', year:1986, cluster:'B', citations:9400, anno:'Probabilistic sequence models — dominated speech recognition.'},
+  {id:'ibm_smt', label:'IBM Statistical MT', type:'paper', year:1990, cluster:'B', citations:6700,
+    anno:'Brown et al. — translation as a noisy-channel decoding problem.'},
+  {id:'brown', label:'Peter Brown', type:'researcher', year:1990, cluster:'B', citations:0, anno:'Co-led IBM\'s statistical machine translation.'},
+  {id:'seq2seq', label:'Seq2Seq Translation', type:'paper', year:2014, cluster:'B', citations:24000,
+    anno:'Sutskever, Vinyals, Le — neural encoder–decoder for machine translation.'},
+  {id:'bahdanau_attn', label:'Bahdanau Attention', type:'paper', year:2015, cluster:'B', citations:35000,
+    anno:'Additive attention for alignment in NMT — the seed of "attention".'},
+
+  // ---- CLUSTER A (cont.) : DEEP-LEARNING REVIVAL (waves 3–4) ----
+  {id:'backprop', label:'Backpropagation', type:'paper', year:1986, cluster:'A', citations:65000,
+    anno:'Rumelhart, Hinton, Williams — trained multilayer nets, ending the winter.'},
+  {id:'hinton', label:'Geoffrey Hinton', type:'researcher', year:1986, cluster:'A', citations:0, anno:'"Godfather of deep learning"; backprop, AlexNet advisor.'},
+  {id:'rumelhart', label:'David Rumelhart', type:'researcher', year:1986, cluster:'A', citations:0, anno:'Co-developed backprop & PDP framework.'},
+  {id:'lstm', label:'LSTM', type:'paper', year:1997, cluster:'A', citations:80000,
+    anno:'Hochreiter & Schmidhuber — gated memory solved vanishing gradients.'},
+  {id:'hochreiter', label:'Sepp Hochreiter', type:'researcher', year:1997, cluster:'A', citations:0, anno:'Co-invented the LSTM cell.'},
+  {id:'schmidhuber', label:'Jürgen Schmidhuber', type:'researcher', year:1997, cluster:'A', citations:0, anno:'Co-invented LSTM; long-time sequence-learning advocate.'},
+  {id:'imagenet', label:'ImageNet', type:'paper', year:2009, cluster:'A', citations:55000,
+    anno:'Deng & Fei-Fei — 14M labeled images; the benchmark that fueled deep learning.'},
+  {id:'feifei', label:'Fei-Fei Li', type:'researcher', year:2009, cluster:'A', citations:0, anno:'Created ImageNet at Stanford/Princeton.'},
+  {id:'stanford', label:'Stanford', type:'institution', year:2009, cluster:'A', citations:0, anno:'Home of ImageNet & much modern AI.'},
+  {id:'alexnet', label:'AlexNet', type:'paper', year:2012, cluster:'A', citations:120000,
+    anno:'Krizhevsky, Sutskever, Hinton — GPU CNN crushed ImageNet, igniting the boom.'},
+  {id:'krizhevsky', label:'Alex Krizhevsky', type:'researcher', year:2012, cluster:'A', citations:0, anno:'Lead author of AlexNet.'},
+  {id:'sutskever', label:'Ilya Sutskever', type:'researcher', year:2012, cluster:'A', citations:0, anno:'AlexNet & Seq2Seq co-author — spans both clusters.'},
+  {id:'toronto', label:'Univ. of Toronto', type:'institution', year:2012, cluster:'A', citations:0, anno:'Hinton\'s lab; cradle of the deep-learning revival.'},
+  {id:'gpu', label:'GPU Acceleration', type:'technique', year:2012, cluster:'A', citations:0, anno:'CUDA parallelism made deep nets practical to train.'},
+  {id:'cnn', label:'Convolutional Nets', type:'technique', year:1998, cluster:'A', citations:42000, anno:'LeCun\'s weight-sharing architecture for vision.'},
+  {id:'lecun', label:'Yann LeCun', type:'researcher', year:1998, cluster:'A', citations:0, anno:'Pioneered CNNs (LeNet); deep-learning laureate.'},
+
+  // ---- WEAK BRIDGE (pre-seeded teaser, wave 3) ----
+  {id:'word2vec', label:'Word2Vec', type:'paper', year:2013, cluster:'X', citations:40000,
+    anno:'Mikolov et al. — neural word embeddings: a neural method (A) for language (B). The first faint contact.'},
+  {id:'mikolov', label:'Tomáš Mikolov', type:'researcher', year:2013, cluster:'X', citations:0, anno:'Created Word2Vec at Google.'},
+
+  // ---- THE BRIDGE (wave 5) ----
+  {id:'transformer', label:'Attention Is All You Need', type:'bridge', year:2017, cluster:'X', citations:130000,
+    anno:'Vaswani et al. — the Transformer. Cites the connectionist deep-learning lineage AND statistical seq-to-seq MT. Closes the cut.'},
+  {id:'vaswani', label:'Ashish Vaswani', type:'researcher', year:2017, cluster:'X', citations:0, anno:'Lead author of the Transformer paper.'},
+  {id:'google_brain', label:'Google Brain', type:'institution', year:2017, cluster:'X', citations:0, anno:'Funded & shipped the Transformer.'},
+  {id:'self_attention', label:'Self-Attention', type:'technique', year:2017, cluster:'X', citations:0, anno:'Each token attends to all others — replaced recurrence entirely.'},
+  {id:'bert_gpt', label:'BERT / GPT Lineage', type:'paper', year:2018, cluster:'X', citations:90000,
+    anno:'Transformer descendants — pretrained LMs that became modern AI (2018–2024).'}
+];
+
+/* edges: kind influences styling; wave gates when it appears */
+const EDGES = [
+  // Wave 1 — Cluster A seed
+  {s:'mcculloch_pitts', t:'mcculloch', kind:'wrote', wave:1},
+  {s:'mcculloch_pitts', t:'pitts', kind:'wrote', wave:1},
+  {s:'mcculloch_pitts', t:'mit', kind:'funded', wave:1},
+  {s:'dartmouth_ws', t:'mccarthy', kind:'wrote', wave:1},
+  {s:'dartmouth_ws', t:'minsky', kind:'wrote', wave:1},
+  {s:'dartmouth_ws', t:'dartmouth', kind:'funded', wave:1},
+  {s:'dartmouth_ws', t:'mcculloch_pitts', kind:'cites', wave:1},
+  {s:'perceptron', t:'rosenblatt', kind:'wrote', wave:1},
+  {s:'perceptron', t:'cornell', kind:'funded', wave:1},
+  {s:'perceptron', t:'mcculloch_pitts', kind:'cites', wave:1},
+  {s:'perceptron', t:'gradient_descent', kind:'uses', wave:1},
+  {s:'perceptrons_book', t:'minsky', kind:'wrote', wave:1},
+  {s:'perceptrons_book', t:'papert', kind:'wrote', wave:1},
+  {s:'perceptrons_book', t:'perceptron', kind:'critiques', wave:1},
+  {s:'perceptrons_book', t:'mit', kind:'funded', wave:1},
+
+  // Wave 2 — Cluster B seed
+  {s:'shannon', t:'claude_shannon', kind:'wrote', wave:2},
+  {s:'shannon', t:'bell_labs', kind:'funded', wave:2},
+  {s:'ngram', t:'shannon', kind:'cites', wave:2},
+  {s:'ngram', t:'jelinek', kind:'wrote', wave:2},
+  {s:'ngram', t:'ibm', kind:'funded', wave:2},
+  {s:'hmm', t:'ngram', kind:'cites', wave:2},
+  {s:'hmm', t:'jelinek', kind:'wrote', wave:2},
+  {s:'hmm', t:'ibm', kind:'funded', wave:2},
+  {s:'ibm_smt', t:'brown', kind:'wrote', wave:2},
+  {s:'ibm_smt', t:'ibm', kind:'funded', wave:2},
+  {s:'ibm_smt', t:'hmm', kind:'cites', wave:2},
+  {s:'ibm_smt', t:'shannon', kind:'cites', wave:2},
+
+  // Wave 3 — Deep revival pt.1 (Cluster A grows)
+  {s:'backprop', t:'hinton', kind:'wrote', wave:3},
+  {s:'backprop', t:'rumelhart', kind:'wrote', wave:3},
+  {s:'backprop', t:'perceptrons_book', kind:'answers', wave:3},
+  {s:'backprop', t:'gradient_descent', kind:'uses', wave:3},
+  {s:'backprop', t:'perceptron', kind:'cites', wave:3},
+  {s:'lstm', t:'hochreiter', kind:'wrote', wave:3},
+  {s:'lstm', t:'schmidhuber', kind:'wrote', wave:3},
+  {s:'lstm', t:'backprop', kind:'cites', wave:3},
+  {s:'cnn', t:'lecun', kind:'wrote', wave:3},
+  {s:'cnn', t:'backprop', kind:'cites', wave:3},
+
+  // Wave 3 — weak bridge teaser (Word2Vec) — single low-weight link to B
+  {s:'word2vec', t:'mikolov', kind:'wrote', wave:3},
+  {s:'word2vec', t:'backprop', kind:'cites', wave:3},
+  {s:'word2vec', t:'ngram', kind:'cites', wave:3, weak:true},
+
+  // Wave 4 — Deep revival pt.2 (Cluster A densifies)
+  {s:'imagenet', t:'feifei', kind:'wrote', wave:4},
+  {s:'imagenet', t:'stanford', kind:'funded', wave:4},
+  {s:'alexnet', t:'krizhevsky', kind:'wrote', wave:4},
+  {s:'alexnet', t:'sutskever', kind:'wrote', wave:4},
+  {s:'alexnet', t:'hinton', kind:'wrote', wave:4},
+  {s:'alexnet', t:'toronto', kind:'funded', wave:4},
+  {s:'alexnet', t:'imagenet', kind:'uses', wave:4},
+  {s:'alexnet', t:'cnn', kind:'uses', wave:4},
+  {s:'alexnet', t:'gpu', kind:'uses', wave:4},
+  {s:'alexnet', t:'backprop', kind:'uses', wave:4},
+  {s:'seq2seq', t:'sutskever', kind:'wrote', wave:4},
+  {s:'seq2seq', t:'lstm', kind:'uses', wave:4},
+  {s:'seq2seq', t:'ibm_smt', kind:'cites', wave:4},
+  {s:'bahdanau_attn', t:'seq2seq', kind:'cites', wave:4},
+
+  // Wave 5 — THE BRIDGE
+  {s:'transformer', t:'vaswani', kind:'wrote', wave:5},
+  {s:'transformer', t:'google_brain', kind:'funded', wave:5},
+  {s:'transformer', t:'self_attention', kind:'introduces', wave:5},
+  {s:'transformer', t:'alexnet', kind:'cites', wave:5, bridge:true},        // → Cluster A
+  {s:'transformer', t:'backprop', kind:'cites', wave:5, bridge:true},       // → Cluster A
+  {s:'transformer', t:'lstm', kind:'cites', wave:5, bridge:true},           // → Cluster A
+  {s:'transformer', t:'seq2seq', kind:'cites', wave:5, bridge:true},        // → Cluster B
+  {s:'transformer', t:'bahdanau_attn', kind:'cites', wave:5, bridge:true},  // → Cluster B
+  {s:'transformer', t:'word2vec', kind:'cites', wave:5},
+  {s:'bert_gpt', t:'transformer', kind:'cites', wave:5},
+  {s:'bert_gpt', t:'self_attention', kind:'uses', wave:5}
+];
+
+/* ============================================================
+   2) BUILD SCRIPT — ordered ingest events (the timeline source of truth).
+   Each event: {t (seconds), src, log, addNodes[], addEdges[(s,t)], alert?, wave}
+   Generated procedurally below from a compact per-wave spec so the log,
+   graph, and scrubber all derive from this single ordered array.
+   ============================================================ */
+const NMAP = Object.fromEntries(NODES.map(n=>[n.id,n]));
+function edgeKey(s,t){return s+'->'+t;}
+const EMAP = {};
+EDGES.forEach(e=>{EMAP[edgeKey(e.s,e.t)] = e;});
+
+// Compact build spec: each entry = one ingest (one log line) listing a source paper
+// plus the supporting entities/edges it pulls in. Order = compile order.
+const BUILD_SPEC = [
+  // WAVE 1 — SEED, FOUNDATIONS (Cluster A)
+  {wave:1, src:'mcculloch_pitts', nodes:['mcculloch_pitts','mcculloch','pitts','mit'],
+    edges:[['mcculloch_pitts','mcculloch'],['mcculloch_pitts','pitts'],['mcculloch_pitts','mit']]},
+  {wave:1, src:'dartmouth_ws', nodes:['dartmouth_ws','mccarthy','minsky','dartmouth'],
+    edges:[['dartmouth_ws','mccarthy'],['dartmouth_ws','minsky'],['dartmouth_ws','dartmouth'],['dartmouth_ws','mcculloch_pitts']]},
+  {wave:1, src:'perceptron', nodes:['perceptron','rosenblatt','cornell','gradient_descent'],
+    edges:[['perceptron','rosenblatt'],['perceptron','cornell'],['perceptron','mcculloch_pitts'],['perceptron','gradient_descent']]},
+  {wave:1, src:'perceptrons_book', nodes:['perceptrons_book','papert'],
+    edges:[['perceptrons_book','minsky'],['perceptrons_book','papert'],['perceptrons_book','perceptron'],['perceptrons_book','mit']],
+    alert:'CLUSTER FORMED :: cluster{connectionist} :: 8 nodes, 1 component'},
+
+  // WAVE 2 — SECOND SCHOOL (Cluster B, far away)
+  {wave:2, src:'shannon', nodes:['shannon','claude_shannon','bell_labs'],
+    edges:[['shannon','claude_shannon'],['shannon','bell_labs']]},
+  {wave:2, src:'ngram', nodes:['ngram','jelinek','ibm'],
+    edges:[['ngram','shannon'],['ngram','jelinek'],['ngram','ibm']]},
+  {wave:2, src:'hmm', nodes:['hmm'],
+    edges:[['hmm','ngram'],['hmm','jelinek'],['hmm','ibm']]},
+  {wave:2, src:'ibm_smt', nodes:['ibm_smt','brown'],
+    edges:[['ibm_smt','brown'],['ibm_smt','ibm'],['ibm_smt','hmm'],['ibm_smt','shannon']],
+    alert:'NOTE :: 0 cross-edges between cluster{connectionist} and cluster{statistical} :: COMPONENTS=2 (graph cut)'},
+
+  // WAVE 3 — DEEP REVIVAL pt.1 + weak teaser
+  {wave:3, src:'backprop', nodes:['backprop','hinton','rumelhart'],
+    edges:[['backprop','hinton'],['backprop','rumelhart'],['backprop','perceptrons_book'],['backprop','gradient_descent'],['backprop','perceptron']]},
+  {wave:3, src:'cnn', nodes:['cnn','lecun'],
+    edges:[['cnn','lecun'],['cnn','backprop']]},
+  {wave:3, src:'lstm', nodes:['lstm','hochreiter','schmidhuber'],
+    edges:[['lstm','hochreiter'],['lstm','schmidhuber'],['lstm','backprop']]},
+  {wave:3, src:'word2vec', nodes:['word2vec','mikolov'],
+    edges:[['word2vec','mikolov'],['word2vec','backprop'],['word2vec','ngram']],
+    alert:'WEAK LINK :: node[word2vec] grazes cluster{statistical} :: betweenness LOW :: clusters still cut'},
+
+  // WAVE 4 — DEEP REVIVAL pt.2 (densify A) + seq2seq grows in B
+  {wave:4, src:'imagenet', nodes:['imagenet','feifei','stanford'],
+    edges:[['imagenet','feifei'],['imagenet','stanford']]},
+  {wave:4, src:'alexnet', nodes:['alexnet','krizhevsky','sutskever','toronto','gpu'],
+    edges:[['alexnet','krizhevsky'],['alexnet','sutskever'],['alexnet','hinton'],['alexnet','toronto'],['alexnet','imagenet'],['alexnet','cnn'],['alexnet','gpu'],['alexnet','backprop']]},
+  {wave:4, src:'seq2seq', nodes:['seq2seq'],
+    edges:[['seq2seq','sutskever'],['seq2seq','lstm'],['seq2seq','ibm_smt']]},
+  {wave:4, src:'bahdanau_attn', nodes:['bahdanau_attn'],
+    edges:[['bahdanau_attn','seq2seq']],
+    alert:'CLUSTER DENSE :: cluster{connectionist} now 23 nodes :: still COMPONENTS=2'},
+
+  // WAVE 5 — THE BRIDGE
+  {wave:5, src:'transformer', nodes:['transformer','vaswani','google_brain','self_attention'],
+    edges:[['transformer','vaswani'],['transformer','google_brain'],['transformer','self_attention'],
+           ['transformer','alexnet'],['transformer','backprop'],['transformer','lstm'],
+           ['transformer','seq2seq'],['transformer','bahdanau_attn'],['transformer','word2vec']],
+    alert:'BRIDGE DETECTED :: node[transformer] closes cut between cluster{connectionist} and cluster{statistical-NLP} :: graph now fully connected :: COMPONENTS 2->1'},
+  {wave:5, src:'bert_gpt', nodes:['bert_gpt'],
+    edges:[['bert_gpt','transformer'],['bert_gpt','self_attention']],
+    alert:'INDEX COMPLETE :: steady state :: awaiting query_'}
+];
+
+/* Expand BUILD_SPEC into a flat, timestamped ingestEvents array. */
+const SRC_HASH = {}; let _h=0;
+function hashFor(id){ if(!SRC_HASH[id]) SRC_HASH[id]='0x'+(0x1a2b+(++_h)*0x137).toString(16); return SRC_HASH[id]; }
+function srcLabel(id){return NMAP[id].label+' ('+NMAP[id].year+')';}
+
+const INGEST = [];
+let clk = 0.4;
+let srcCounter = 0;
+BUILD_SPEC.forEach((spec,i)=>{
+  srcCounter++;
+  const dt = 1.4; // seconds between ingests (scaled by speed at runtime)
+  const newNodes = spec.nodes.filter(id=>id);
+  const newEdges = spec.edges.map(([s,t])=>({s,t}));
+  const idStr = 'src#'+String(srcCounter).padStart(4,'0');
+  const log = `ingest ${idStr} ${hashFor(spec.src)} ${srcLabel(spec.src)} -> +${newNodes.length} node, +${newEdges.length} edge`;
+  INGEST.push({
+    t: clk, wave: spec.wave, src: spec.src,
+    log, addNodes:newNodes, addEdges:newEdges, alert:spec.alert||null,
+    idStr
+  });
+  clk += dt;
+});
+const TOTAL_T = clk + 1.0;
+
+// wave start times (for scrubber ticks + labels)
+const WAVE_T = {0:0};
+INGEST.forEach(ev=>{ if(WAVE_T[ev.wave]===undefined) WAVE_T[ev.wave]=ev.t; });
+WAVE_T[6]=TOTAL_T;
+
+const STAGE_NARR = {
+  0:'COLD BOOT — empty blueprint. Press BEGIN to compile the index.',
+  1:'SEED — connectionist foundations: McCulloch-Pitts, Dartmouth, the Perceptron.',
+  2:'SECOND SCHOOL — statistical NLP grows far away. Two disconnected components.',
+  3:'DEEP REVIVAL — backprop, CNNs, LSTM rebuild Cluster A. Word2Vec grazes B (weak link).',
+  4:'DEEP REVIVAL II — ImageNet & AlexNet densify A; seq2seq extends B. Still 2 components.',
+  5:'BRIDGE — Transformer cites BOTH clusters. The cut closes; graph fuses into one.'
+};
+
+/* ============================================================
+   3) SIMULATION — hand-rolled force layout, O(n^2) (~50 nodes is fine).
+   Forces: clamped pairwise repulsion (min-dist guarded), spring
+   attraction along edges, gentle centering gravity, velocity damping.
+   Each node has a 0..1 "birth" progress for the blip entrance animation.
+   ============================================================ */
+const sim = {
+  nodes:[],          // live node objects (present so far)
+  edges:[],          // live edge objects (present so far)
+  byId:{},           // id -> live node
+  alpha:0,           // simulation temperature
+  alphaTarget:0,
+  width:1000, height:700
+};
+
+// cluster anchor (normalized): A top-left, B bottom-right, X center
+function clusterAnchor(cluster){
+  if(cluster==='A') return {x:0.30, y:0.34};
+  if(cluster==='B') return {x:0.72, y:0.70};
+  return {x:0.52, y:0.52};
+}
+
+function makeLiveNode(def){
+  const a = clusterAnchor(def.cluster);
+  // spawn near cluster anchor with jitter
+  const jx = (Math.random()-0.5)*0.18, jy=(Math.random()-0.5)*0.18;
+  const n = {
+    ...def,
+    x: (a.x+jx)*sim.width, y:(a.y+jy)*sim.height,
+    vx:0, vy:0,
+    fx:null, fy:null,
+    birth: REDUCED?1:0,     // entrance progress
+    anchor:a,
+    pinned:false, deg:0
+  };
+  // Pin clusters to opposite halves while seeding (released after wave 2 settles)
+  if(def.cluster==='A'){ n.fx=(a.x+jx)*sim.width*0.55 + sim.width*0.10; }
+  return n;
+}
+
+// add node to live sim (idempotent)
+function addNode(id){
+  if(sim.byId[id]) return sim.byId[id];
+  const n = makeLiveNode(NMAP[id]);
+  sim.nodes.push(n); sim.byId[id]=n;
+  reheat(0.7);
+  return n;
+}
+// add edge (idempotent); records trace progress for plotter animation
+function addEdge(s,t){
+  const k = edgeKey(s,t);
+  if(sim.edges.find(e=>e.key===k)) return;
+  const def = EMAP[k] || {s,t,kind:'cites'};
+  const e = {key:k, s, t, kind:def.kind, weak:!!def.weak, bridge:!!def.bridge,
+             trace: REDUCED?1:0, traceStart:performance.now()};
+  sim.edges.push(e);
+  reheat(0.6);
+}
+
+function reheat(v){ sim.alpha = Math.max(sim.alpha, v); sim.alphaTarget = Math.max(sim.alphaTarget, 0.001); }
+
+// release cluster pins (called once Cluster B is fully seeded so layout relaxes freely)
+function releasePins(){ sim.nodes.forEach(n=>{ if(!n.pinned){ n.fx=null; n.fy=null; } }); }
+
+// degree recompute
+function recomputeDegrees(){
+  sim.nodes.forEach(n=>n.deg=0);
+  sim.edges.forEach(e=>{
+    if(sim.byId[e.s]) sim.byId[e.s].deg++;
+    if(sim.byId[e.t]) sim.byId[e.t].deg++;
+  });
+}
+
+// ---- the physics tick ----
+function tickSim(dt){
+  const n = sim.nodes.length;
+  if(n===0) return;
+  // cool toward 0
+  sim.alpha += (0 - sim.alpha) * 0.018;
+  if(sim.alpha < 0.002) sim.alpha = 0;
+  const a = sim.alpha;
+  const cx = sim.width*0.5, cy = sim.height*0.5;
+
+  // birth animation progression (blip: overshoot then settle handled in render scale)
+  for(let i=0;i<n;i++){ const p=sim.nodes[i]; if(p.birth<1){ p.birth=Math.min(1,p.birth + dt*3.2); } }
+
+  if(a<=0) return; // frozen — skip physics work (throttle)
+
+  // pairwise repulsion (clamped + min-dist guarded)
+  const REPULSE = 5200;
+  for(let i=0;i<n;i++){
+    const A=sim.nodes[i];
+    for(let j=i+1;j<n;j++){
+      const B=sim.nodes[j];
+      let dx=A.x-B.x, dy=A.y-B.y;
+      let d2=dx*dx+dy*dy;
+      if(d2<0.01) d2=0.01;          // guard divide-by-zero
+      let d=Math.sqrt(d2);
+      const minD=22; if(d<minD) d=minD;
+      let f=REPULSE/(d*d);
+      if(f>40) f=40;                // clamp to avoid explosion
+      const ux=dx/d, uy=dy/d;
+      const fx=ux*f*a, fy=uy*f*a;
+      A.vx+=fx; A.vy+=fy; B.vx-=fx; B.vy-=fy;
+    }
+  }
+  // spring attraction along edges
+  const SPRING=0.020, REST=92;
+  for(let e of sim.edges){
+    const A=sim.byId[e.s], B=sim.byId[e.t];
+    if(!A||!B) continue;
+    let dx=B.x-A.x, dy=B.y-A.y;
+    let d=Math.sqrt(dx*dx+dy*dy)||0.01;
+    const rest = e.bridge?REST*1.6:(e.weak?REST*2.2:REST);
+    let f=(d-rest)*SPRING*a;
+    const ux=dx/d, uy=dy/d;
+    A.vx+=ux*f; A.vy+=uy*f; B.vx-=ux*f; B.vy-=uy*f;
+  }
+  // centering gravity + soft pull to cluster anchor (keeps story layout)
+  for(let i=0;i<n;i++){
+    const p=sim.nodes[i];
+    p.vx += (cx-p.x)*0.0006*a;
+    p.vy += (cy-p.y)*0.0006*a;
+    if(p.fx===null){
+      const ax=p.anchor.x*sim.width, ay=p.anchor.y*sim.height;
+      p.vx += (ax-p.x)*0.0016*a;
+      p.vy += (ay-p.y)*0.0016*a;
+    }
+  }
+  // integrate + damp + pin
+  const DAMP=0.86;
+  for(let i=0;i<n;i++){
+    const p=sim.nodes[i];
+    if(p.fx!==null){ p.x=p.fx; p.vx=0; } else { p.vx*=DAMP; p.x+=p.vx; }
+    if(p.fy!==null){ p.y=p.fy; p.vy=0; } else { p.vy*=DAMP; p.y+=p.vy; }
+    // clamp inside sheet
+    const m=46;
+    if(p.x<m)p.x=m; if(p.x>sim.width-m)p.x=sim.width-m;
+    if(p.y<m)p.y=m; if(p.y>sim.height-m)p.y=sim.height-m;
+    // NaN guard
+    if(!isFinite(p.x)||!isFinite(p.y)){ p.x=cx; p.y=cy; p.vx=0; p.vy=0; }
+  }
+}
+
+/* ============================================================
+   4) RENDER — canvas, HiDPI aware. Blueprint grid + plotter ink.
+   ============================================================ */
+const canvas = document.getElementById('graph');
+const ctx = canvas.getContext('2d');
+let DPR = Math.max(1, window.devicePixelRatio||1);
+const view = {scale:1, ox:0, oy:0};   // pan/zoom
+let hoverNode=null, pinnedNode=null;
+let labelsOn=true;
+let activeType=null;     // legend filter
+const typeOff = {};      // toggled-off types
+let lineagePaths=[];     // for click lineage tracing (sets of node ids)
+let pulseSet=new Set();  // grep pulsing nodes
+
+function resize(){
+  DPR = Math.max(1, window.devicePixelRatio||1);
+  const r = canvas.parentElement.getBoundingClientRect();
+  canvas.width = Math.floor(r.width*DPR);
+  canvas.height = Math.floor(r.height*DPR);
+  canvas.style.width = r.width+'px';
+  canvas.style.height = r.height+'px';
+  sim.width = r.width; sim.height = r.height;
+}
+window.addEventListener('resize', resize);
+
+function worldToScreen(x,y){ return {x:(x*view.scale+view.ox), y:(y*view.scale+view.oy)}; }
+function screenToWorld(x,y){ return {x:(x-view.ox)/view.scale, y:(y-view.oy)/view.scale}; }
+
+function drawGrid(w,h){
+  ctx.save();
+  // fine grid
+  ctx.lineWidth=1;
+  const step=28*view.scale;
+  const ox = ((view.ox)%step+step)%step;
+  const oy = ((view.oy)%step+step)%step;
+  ctx.strokeStyle='rgba(31,122,140,0.13)';
+  ctx.beginPath();
+  for(let x=ox;x<w;x+=step){ ctx.moveTo(x,0); ctx.lineTo(x,h); }
+  for(let y=oy;y<h;y+=step){ ctx.moveTo(0,y); ctx.lineTo(w,y); }
+  ctx.stroke();
+  // coarse grid (every 4)
+  const big=step*4;
+  const bx=((view.ox)%big+big)%big, by=((view.oy)%big+big)%big;
+  ctx.strokeStyle='rgba(31,122,140,0.26)';
+  ctx.beginPath();
+  for(let x=bx;x<w;x+=big){ ctx.moveTo(x,0); ctx.lineTo(x,h); }
+  for(let y=by;y<h;y+=big){ ctx.moveTo(0,y); ctx.lineTo(w,y); }
+  ctx.stroke();
+  ctx.restore();
+}
+
+function nodeRadius(n){
+  const base = n.type==='bridge'?13 : (n.type==='paper'?9.5 : n.type==='institution'?9 : 7.5);
+  const cw = Math.min(5, Math.log10((n.citations||100)+10)*1.4);
+  return base + cw*0.6;
+}
+
+// is node visible under current type filter
+function nodeVisible(n){ return !typeOff[n.type]; }
+
+function highlightSet(){
+  // returns {nodes:Set, edges:Set} that should be bright; null = all bright
+  if(pinnedNode || hoverNode){
+    const focus = pinnedNode || hoverNode;
+    const ns=new Set([focus.id]); const es=new Set();
+    for(const e of sim.edges){
+      if(e.s===focus.id){ ns.add(e.t); es.add(e.key); }
+      else if(e.t===focus.id){ ns.add(e.s); es.add(e.key); }
+    }
+    return {nodes:ns, edges:es};
+  }
+  return null;
+}
+
+function render(){
+  const w=canvas.width, h=canvas.height;
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  const W=w/DPR, H=h/DPR;
+  // bg
+  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle='#0a1626';
+  ctx.fillRect(0,0,W,H);
+  drawGrid(W,H);
+
+  const hl = highlightSet();
+  const lineageNodes = new Set();
+  lineagePaths.forEach(p=>p.forEach(id=>lineageNodes.add(id)));
+
+  // ---- EDGES (plotter trace) ----
+  ctx.lineCap='round';
+  for(const e of sim.edges){
+    const A=sim.byId[e.s], B=sim.byId[e.t];
+    if(!A||!B) continue;
+    if(!nodeVisible(A)||!nodeVisible(B)) continue;
+    const pa=worldToScreen(A.x,A.y), pb=worldToScreen(B.x,B.y);
+    // trace progress (stroke-dashoffset style): animate length
+    let tr=e.trace;
+    if(tr<1 && !REDUCED){
+      const el=(performance.now()-e.traceStart)/350;   // 350ms ease-out
+      tr=Math.min(1, el);
+      e.trace=tr;
+    }
+    const ex = pa.x + (pb.x-pa.x)*tr;
+    const ey = pa.y + (pb.y-pa.y)*tr;
+
+    let bright=true, dim=0.0;
+    if(hl){ bright = hl.edges.has(e.key); }
+    if(lineagePaths.length){ bright = lineageNodes.has(e.s)&&lineageNodes.has(e.t); }
+
+    let col = e.bridge?'rgba(255,255,255,0.9)':(e.weak?'rgba(255,209,102,0.55)':'rgba(31,122,140,0.7)');
+    let lw = e.bridge?2.0:(e.weak?1.0:1.1);
+    if(e.kind==='cites') lw+=0.2;
+    if(!bright && (hl||lineagePaths.length)){ col = 'rgba(31,122,140,0.10)'; lw=0.8; }
+
+    ctx.strokeStyle=col; ctx.lineWidth=lw;
+    if(e.weak && bright){ ctx.setLineDash([3,4]); } else { ctx.setLineDash([]); }
+    ctx.beginPath();
+    ctx.moveTo(pa.x,pa.y);
+    ctx.lineTo(ex,ey);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // traveling plotter dot at drawing tip
+    if(tr<1 && !REDUCED){
+      ctx.fillStyle = e.bridge?'#fff':'#39ff14';
+      ctx.beginPath(); ctx.arc(ex,ey,2.4,0,Math.PI*2); ctx.fill();
+      ctx.shadowColor=e.bridge?'#fff':'#39ff14'; ctx.shadowBlur=8;
+      ctx.beginPath(); ctx.arc(ex,ey,1.4,0,Math.PI*2); ctx.fill();
+      ctx.shadowBlur=0;
+    }
+  }
+
+  // ---- NODES (hollow rings / squares, hairline) ----
+  for(const n of sim.nodes){
+    if(!nodeVisible(n)){ continue; }
+    const p=worldToScreen(n.x,n.y);
+    let r=nodeRadius(n)*view.scale;
+    // blip entrance: overshoot to ~110% then settle
+    let bscale=1;
+    if(n.birth<1){
+      const b=n.birth;
+      bscale = b<0.6 ? (b/0.6)*1.1 : 1.1 - ((b-0.6)/0.4)*0.1;
+    }
+    r*=bscale;
+    const def=TYPE[n.type];
+    let col=def.color;
+
+    // dimming logic
+    let dim=false;
+    if(hl && !hl.nodes.has(n.id)) dim=true;
+    if(lineagePaths.length && !lineageNodes.has(n.id)) dim=true;
+    if(activeType && n.type!==activeType) dim=true;
+
+    const alpha = dim?0.15:1.0;
+    ctx.globalAlpha=alpha;
+
+    // glow
+    if(!dim){
+      ctx.shadowColor=col;
+      ctx.shadowBlur = n.type==='bridge'?20:10;
+    }
+    ctx.strokeStyle=col;
+    ctx.lineWidth = (n===hoverNode||n===pinnedNode)?2.4:1.4;
+    ctx.fillStyle='rgba(10,22,38,0.85)';
+
+    if(def.shape==='ring'){
+      ctx.beginPath(); ctx.arc(p.x,p.y,r,0,Math.PI*2);
+      ctx.fill(); ctx.stroke();
+      // inner tick
+      if(!dim){ ctx.beginPath(); ctx.arc(p.x,p.y,r*0.45,0,Math.PI*2); ctx.stroke(); }
+    } else {
+      ctx.beginPath(); ctx.rect(p.x-r,p.y-r,r*2,r*2);
+      ctx.fill(); ctx.stroke();
+      if(n.type==='bridge' && !dim){
+        // pulsing diamond inside bridge
+        const t=(performance.now()/400)%1;
+        ctx.lineWidth=1.4; ctx.strokeStyle='rgba(255,255,255,'+(0.5+0.5*Math.sin(performance.now()/250))+')';
+        const rr=r*0.55;
+        ctx.beginPath(); ctx.moveTo(p.x,p.y-rr); ctx.lineTo(p.x+rr,p.y); ctx.lineTo(p.x,p.y+rr); ctx.lineTo(p.x-rr,p.y); ctx.closePath(); ctx.stroke();
+      }
+    }
+    ctx.shadowBlur=0;
+
+    // pulse ring for grep hits
+    if(pulseSet.has(n.id)){
+      const t=(performance.now()/600)%1;
+      ctx.globalAlpha=(1-t)*0.8;
+      ctx.strokeStyle='#34d6ff'; ctx.lineWidth=1.6;
+      ctx.beginPath(); ctx.arc(p.x,p.y,r+ t*16,0,Math.PI*2); ctx.stroke();
+      ctx.globalAlpha=alpha;
+    }
+
+    // label
+    if(labelsOn && !dim){
+      const showLabel = view.scale>0.7 || n.type==='paper' || n.type==='bridge' || n===hoverNode || n===pinnedNode || n.deg>3;
+      if(showLabel){
+        ctx.globalAlpha = (n===hoverNode||n===pinnedNode)?1:0.82;
+        ctx.font = (n.type==='paper'||n.type==='bridge'?'700 ':'')+(10)+'px '+'ui-monospace, monospace';
+        ctx.fillStyle = n.type==='bridge'?'#fff':col;
+        ctx.textAlign='center'; ctx.textBaseline='top';
+        const lbl = (n.type==='researcher'||n.type==='institution') ? n.label.toUpperCase() : n.label;
+        ctx.fillText(lbl, p.x, p.y+r+3);
+      }
+    }
+    ctx.globalAlpha=1;
+  }
+}
+
+/* ============================================================
+   5) GROWTH CONTROLLER — single tick clock drives everything.
+   clock (seconds) -> derive which ingest events have fired.
+   Scrubbing sets clock and re-derives present nodes/edges.
+   ============================================================ */
+const clock = {
+  t:0, playing:false, speed:1, lastReal:0,
+  firedIdx:-1     // index of last fired ingest event
+};
+
+function setStage(wave){
+  document.getElementById('narr').textContent = STAGE_NARR[wave]||'';
+  const yr = wave===0?'1943':(INGEST.filter(e=>e.wave<=wave).slice(-1)[0]?.src ? NMAP[INGEST.filter(e=>e.wave<=wave).slice(-1)[0].src].year : 1943);
+  document.getElementById('tbRev').textContent = (yr||1943)+'.0'+wave;
+}
+
+// rebuild sim state from scratch up to clock.t (used for scrubbing backward)
+function deriveAt(t){
+  // reset sim
+  sim.nodes=[]; sim.edges=[]; sim.byId={};
+  clearLog();
+  let lastWave=0, fired=-1;
+  for(let i=0;i<INGEST.length;i++){
+    const ev=INGEST[i];
+    if(ev.t<=t){
+      fired=i;
+      ev.addNodes.forEach(id=>{ if(!sim.byId[id]){ const nn=makeLiveNode(NMAP[id]); nn.birth=1; sim.nodes.push(nn); sim.byId[id]=nn; }});
+      ev.addEdges.forEach(({s,t:tt})=>{ const k=edgeKey(s,tt); if(!sim.edges.find(e=>e.key===k)){ const def=EMAP[k]||{kind:'cites'}; sim.edges.push({key:k,s,t:tt,kind:def.kind,weak:!!def.weak,bridge:!!def.bridge,trace:1,traceStart:0}); }});
+      appendLog(ev, true);
+      lastWave=ev.wave;
+    } else break;
+  }
+  clock.firedIdx=fired;
+  if(fired>=INGEST.length-1 && t>=INGEST[INGEST.length-1].t) releasePins();
+  // settle layout for derived state
+  recomputeDegrees();
+  sim.alpha=0.0;
+  for(let k=0;k<140;k++) tickSim(1/60);   // pre-relax derived layout
+  // re-set birth=1 so no blip on scrub
+  sim.nodes.forEach(n=>n.birth=1);
+  setStage(lastWave);
+  updateStats();
+}
+
+// fire a single ingest event live (forward play / step)
+function fireEvent(i){
+  const ev=INGEST[i];
+  // pin release timing: release once cluster B finished seeding (end of wave 2)
+  ev.addNodes.forEach(id=>addNode(id));
+  // stagger edge trace starts slightly for plotter feel
+  ev.addEdges.forEach(({s,t:tt},k)=>{ setTimeout(()=>addEdge(s,tt), REDUCED?0:k*70); });
+  appendLog(ev, false);
+  recomputeDegrees();
+  setStage(ev.wave);
+  if(ev.wave>=3) releasePins();      // free clusters to relax once revival begins
+  // BRIDGE reheat: violent re-relaxation
+  if(ev.src==='transformer'){ sim.alpha=0.95; }
+  updateStats();
+}
+
+function clockStep(realNow){
+  if(clock.lastReal===0) clock.lastReal=realNow;
+  let dtReal=(realNow-clock.lastReal)/1000;
+  clock.lastReal=realNow;
+  if(dtReal>0.05) dtReal=0.05;       // clamp big gaps (tab switch)
+
+  if(clock.playing){
+    clock.t += dtReal*clock.speed;
+    if(clock.t>=TOTAL_T){ clock.t=TOTAL_T; clock.playing=false; setPlayBtn(); }
+    // fire any events crossed
+    while(clock.firedIdx+1<INGEST.length && INGEST[clock.firedIdx+1].t<=clock.t){
+      clock.firedIdx++;
+      fireEvent(clock.firedIdx);
+    }
+  }
+  // physics
+  tickSim(dtReal>0?dtReal:1/60);
+  // update transport readouts
+  syncScrub();
+  render();
+  requestAnimationFrame(clockStep);
+}
+
+function stepOnce(){
+  // advance to next ingest event exactly
+  if(clock.firedIdx+1<INGEST.length){
+    clock.firedIdx++;
+    clock.t=INGEST[clock.firedIdx].t+0.001;
+    fireEvent(clock.firedIdx);
+  }
+}
+
+/* ---------- STATS ---------- */
+function countComponents(){
+  if(sim.nodes.length===0) return 0;
+  const adj={}; sim.nodes.forEach(n=>adj[n.id]=[]);
+  sim.edges.forEach(e=>{ if(adj[e.s]&&adj[e.t]){ adj[e.s].push(e.t); adj[e.t].push(e.s);} });
+  const seen=new Set(); let c=0;
+  for(const n of sim.nodes){
+    if(seen.has(n.id)) continue;
+    c++; const stack=[n.id];
+    while(stack.length){ const x=stack.pop(); if(seen.has(x))continue; seen.add(x); adj[x].forEach(y=>{if(!seen.has(y))stack.push(y);}); }
+  }
+  return c;
+}
+function updateStats(){
+  const N=sim.nodes.length, E=sim.edges.length;
+  const deg = N? (2*E/N):0;
+  const dens = N>1? (2*E/(N*(N-1))):0;
+  const srcCount = clock.firedIdx+1;
+  const comp = countComponents();
+  document.getElementById('sNodes').textContent=N;
+  document.getElementById('sEdges').textContent=E;
+  document.getElementById('sDeg').textContent=deg.toFixed(2);
+  document.getElementById('sDens').textContent=dens.toFixed(3);
+  document.getElementById('sSrc').textContent=Math.max(0,srcCount);
+  const compEl=document.getElementById('sComp');
+  compEl.textContent=comp;
+  compEl.className = comp>1?'v warn':'v';
+}
+
+/* ============================================================
+   6) INTERACTIONS — log, hover, click, drag, zoom/pan, legend,
+   transport, scrubber, grep, keyboard.
+   ============================================================ */
+const logEl=document.getElementById('log');
+const logLineEls={};   // src -> line element (for log<->graph binding)
+let cursorEl=null;
+
+function clearLog(){ logEl.innerHTML=''; for(const k in logLineEls) delete logLineEls[k]; addCursor(); }
+function addCursor(){
+  if(cursorEl && cursorEl.parentNode) cursorEl.parentNode.removeChild(cursorEl);
+  cursorEl=document.createElement('span'); cursorEl.id='cursor';
+  const wrap=document.createElement('div'); wrap.className='logline'; wrap.style.cursor='default';
+  wrap.appendChild(document.createTextNode('substrate.idx> '));
+  wrap.appendChild(cursorEl);
+  wrap._cursorWrap=true;
+  logEl.appendChild(wrap);
+}
+function removeCursor(){ const c=logEl.querySelector('div._cursorWrap'); }
+
+function fmtTs(t){ return '[t+'+t.toFixed(1).padStart(4,'0')+'s]'; }
+
+function appendLog(ev, instant){
+  // remove old cursor wrapper
+  const cw=Array.from(logEl.children).find(c=>c._cursorWrap);
+  if(cw) logEl.removeChild(cw);
+
+  // main ingest line
+  const line=document.createElement('div');
+  line.className='logline';
+  line.dataset.src=ev.src;
+  logLineEls[ev.src]=line;
+  const ts=document.createElement('span'); ts.className='ts'; ts.textContent=fmtTs(ev.t)+' ';
+  const prose=document.createElement('span'); prose.className='prose';
+  line.appendChild(ts); line.appendChild(prose);
+  logEl.appendChild(line);
+
+  // log<->graph: hover line lights node
+  line.addEventListener('mouseenter',()=>{ const n=sim.byId[ev.src]; if(n){ hoverNode=n; positionCallout(); } });
+  line.addEventListener('mouseleave',()=>{ if(!pinnedNode){ hoverNode=null; hideCallout(); } });
+  line.addEventListener('click',()=>{ const n=sim.byId[ev.src]; if(n){ focusNode(n); } });
+
+  if(instant || REDUCED){
+    prose.textContent=ev.log;
+  } else {
+    typeText(prose, ev.log, ()=>{});
+  }
+
+  // alert line (inverse video)
+  if(ev.alert){
+    const al=document.createElement('div');
+    al.className='logline alert';
+    al.textContent='>> '+ev.alert;
+    al.dataset.src=ev.src;
+    logEl.appendChild(al);
+    if(!instant && !REDUCED){ al.style.opacity=0; setTimeout(()=>{al.style.transition='opacity .2s';al.style.opacity=1;}, ev.log.length*14+120); }
+  }
+  addCursor();
+  logEl.scrollTop=logEl.scrollHeight;
+}
+
+let typingTimer=null;
+function typeText(el, text, done){
+  let i=0;
+  function tick(){
+    el.textContent=text.slice(0,i);
+    i++;
+    if(i<=text.length){ typingTimer=setTimeout(tick, 1000/(clock.speed*220)+4); }
+    else done&&done();
+    logEl.scrollTop=logEl.scrollHeight;
+  }
+  tick();
+}
+
+/* ---------- LEGEND ---------- */
+function buildLegend(){
+  const leg=document.getElementById('legend');
+  ['paper','researcher','institution','technique','bridge'].forEach(type=>{
+    const chip=document.createElement('div'); chip.className='legchip'; chip.dataset.type=type;
+    const sw=document.createElement('span'); sw.className='swatch '+(TYPE[type].shape==='ring'?'ring':'sq');
+    sw.style.borderColor=TYPE[type].color;
+    sw.style.boxShadow='0 0 5px '+TYPE[type].color;
+    const lab=document.createElement('span'); lab.textContent=TYPE[type].label;
+    const ct=document.createElement('span'); ct.className='ct'; ct.dataset.ctType=type; ct.textContent='0';
+    chip.appendChild(sw); chip.appendChild(lab); chip.appendChild(ct);
+    chip.addEventListener('click',()=>{
+      // toggle filter (ghost type). shift-isolate via activeType
+      typeOff[type]=!typeOff[type];
+      chip.classList.toggle('off', typeOff[type]);
+    });
+    chip.addEventListener('mouseenter',()=>{ activeType=type; });
+    chip.addEventListener('mouseleave',()=>{ activeType=null; });
+    leg.appendChild(chip);
+  });
+}
+function updateLegendCounts(){
+  const counts={paper:0,researcher:0,institution:0,technique:0,bridge:0};
+  sim.nodes.forEach(n=>counts[n.type]++);
+  for(const t in counts){ const el=document.querySelector('[data-ct-type="'+t+'"]'); if(el) el.textContent=counts[t]; }
+}
+
+/* ---------- HOVER / CALLOUT ---------- */
+const callout=document.getElementById('callout');
+let mouseScreen={x:0,y:0};
+function nodeAtScreen(sx,sy){
+  for(let i=sim.nodes.length-1;i>=0;i--){
+    const n=sim.nodes[i];
+    if(!nodeVisible(n)) continue;
+    const p=worldToScreen(n.x,n.y);
+    const r=nodeRadius(n)*view.scale+5;
+    if((sx-p.x)**2+(sy-p.y)**2 <= r*r) return n;
+  }
+  return null;
+}
+function showCallout(n){
+  const def=TYPE[n.type];
+  callout.innerHTML='';
+  const ti=document.createElement('div'); ti.className='ctitle'; ti.textContent=n.label;
+  const ty=document.createElement('div'); ty.className='ctype'; ty.style.color=def.color; ty.textContent=def.label+(n.year?' · '+n.year:'');
+  callout.appendChild(ti); callout.appendChild(ty);
+  if(n.citations){ const c=document.createElement('div'); c.className='crow'; c.textContent='CITATIONS ≈ '+n.citations.toLocaleString(); callout.appendChild(c); }
+  const dg=document.createElement('div'); dg.className='crow'; dg.textContent='DEGREE: '+n.deg; callout.appendChild(dg);
+  if(n.anno){ const a=document.createElement('div'); a.className='canno'; a.textContent=n.anno; callout.appendChild(a); }
+  callout.style.borderColor=def.color;
+  callout.style.display='block';
+  positionCallout();
+}
+function positionCallout(){
+  if(!hoverNode){ return; }
+  const p=worldToScreen(hoverNode.x,hoverNode.y);
+  let x=p.x+18, y=p.y-10;
+  const cw=callout.offsetWidth||240, ch=callout.offsetHeight||100;
+  const r=canvas.getBoundingClientRect();
+  if(x+cw> r.width) x=p.x-cw-18;
+  if(y+ch> r.height) y=r.height-ch-6;
+  if(y<4) y=4;
+  callout.style.left=x+'px'; callout.style.top=y+'px';
+  showCalloutBody(hoverNode);
+}
+function showCalloutBody(n){
+  if(callout.dataset.cur!==n.id){ showCallout(n); callout.dataset.cur=n.id; }
+}
+function hideCallout(){ callout.style.display='none'; callout.dataset.cur=''; }
+
+// flash the matching log line when hovering a node
+let lastFlashed=null;
+function flashLogFor(id){
+  if(lastFlashed===id) return;
+  lastFlashed=id;
+  const el=logLineEls[id];
+  if(el){
+    el.classList.add('flash');
+    el.scrollIntoView({block:'nearest', behavior:REDUCED?'auto':'smooth'});
+    setTimeout(()=>el.classList.remove('flash'),900);
+  }
+}
+
+/* ---------- CLICK -> lineage / focus ---------- */
+function bfsLineage(startId){
+  // trace citation lineage: follow 'cites'/'uses'/'answers' edges outward + 1 hop neighbors
+  const paths=[]; const seen=new Set([startId]); const frontier=[[startId]];
+  let depth=0;
+  let layer=[startId];
+  paths.push([startId]);
+  while(layer.length && depth<6){
+    const next=[];
+    for(const id of layer){
+      for(const e of sim.edges){
+        let nb=null;
+        if(e.s===id) nb=e.t; else if(e.t===id) nb=e.s; else continue;
+        if(seen.has(nb)) continue;
+        seen.add(nb); next.push(nb);
+        paths.push([id,nb]);
+      }
+    }
+    layer=next; depth++;
+  }
+  return {paths, all:seen};
+}
+function focusNode(n){
+  pinnedNode=n; hoverNode=n;
+  const {paths,all}=bfsLineage(n.id);
+  lineagePaths=paths;
+  // lineage readout
+  const ln=document.getElementById('lineage');
+  ln.style.display='block';
+  ln.innerHTML='';
+  const t=document.createElement('div'); t.className='lt'; t.textContent='LINEAGE :: '+n.label; ln.appendChild(t);
+  const mk=(k,v)=>{const r=document.createElement('div'); r.className='lr'; r.innerHTML='<span>'+k+'</span><span class="lv">'+v+'</span>'; ln.appendChild(r);};
+  mk('TYPE', TYPE[n.type].label);
+  mk('YEAR', n.year||'—');
+  mk('DEGREE', n.deg);
+  mk('REACHABLE', all.size+' nodes');
+  // betweenness flavor (highlight bridge specially)
+  if(n.type==='bridge'){
+    mk('BETWEENNESS','MAXIMAL');
+    const h=document.createElement('div'); h.className='lhint'; h.textContent='This node closes the cut between the two clusters — both halves now connect through it.'; ln.appendChild(h);
+    // dramatize merge: clear type filters, briefly isolate via none
+    activeType=null;
+  } else {
+    const h=document.createElement('div'); h.className='lhint'; h.textContent='Click empty sheet to clear lineage trace.'; ln.appendChild(h);
+  }
+  positionCallout();
+  flashLogFor(n.id);
+}
+function clearFocus(){ pinnedNode=null; lineagePaths=[]; document.getElementById('lineage').style.display='none'; if(!hoverNode)hideCallout(); }
+
+/* ---------- MOUSE: hover, drag, pan, zoom ---------- */
+let dragging=null, dragMoved=false, panning=false, panStart=null;
+canvas.addEventListener('mousemove',e=>{
+  const r=canvas.getBoundingClientRect();
+  const sx=e.clientX-r.left, sy=e.clientY-r.top;
+  mouseScreen={x:sx,y:sy};
+  if(dragging){
+    const wp=screenToWorld(sx,sy);
+    dragging.fx=wp.x; dragging.fy=wp.y; dragging.x=wp.x; dragging.y=wp.y;
+    dragMoved=true; reheat(0.4);
+    positionCallout();
+    return;
+  }
+  if(panning){
+    view.ox += (sx-panStart.x); view.oy += (sy-panStart.y);
+    panStart={x:sx,y:sy};
+    positionCallout();
+    return;
+  }
+  const n=nodeAtScreen(sx,sy);
+  if(n!==hoverNode && !pinnedNode){
+    hoverNode=n;
+    if(n){ showCallout(n); flashLogFor(n.id); canvas.style.cursor='pointer'; }
+    else { hideCallout(); lastFlashed=null; canvas.style.cursor='default'; }
+  } else if(n && pinnedNode!==n){
+    flashLogFor(n.id);
+  }
+  if(hoverNode) positionCallout();
+});
+canvas.addEventListener('mousedown',e=>{
+  const r=canvas.getBoundingClientRect();
+  const sx=e.clientX-r.left, sy=e.clientY-r.top;
+  const n=nodeAtScreen(sx,sy);
+  if(n){ dragging=n; dragMoved=false; n._wasfx=n.fx; n._wasfy=n.fy; canvas.style.cursor='grabbing'; }
+  else { panning=true; panStart={x:sx,y:sy}; canvas.style.cursor='grabbing'; }
+});
+window.addEventListener('mouseup',e=>{
+  if(dragging){
+    if(!dragMoved){ focusNode(dragging); }
+    else { /* keep pinned where dropped briefly then release */ dragging.fx=null; dragging.fy=null; reheat(0.3); }
+    dragging=null; canvas.style.cursor='default';
+  }
+  if(panning){ panning=false; canvas.style.cursor='default'; }
+});
+canvas.addEventListener('click',e=>{
+  const r=canvas.getBoundingClientRect();
+  const n=nodeAtScreen(e.clientX-r.left,e.clientY-r.top);
+  if(!n && !dragMoved){ clearFocus(); }
+});
+canvas.addEventListener('wheel',e=>{
+  e.preventDefault();
+  const r=canvas.getBoundingClientRect();
+  const sx=e.clientX-r.left, sy=e.clientY-r.top;
+  const before=screenToWorld(sx,sy);
+  const factor=e.deltaY<0?1.12:1/1.12;
+  view.scale*=factor;
+  view.scale=Math.max(0.4,Math.min(3.5,view.scale));
+  const after=screenToWorld(sx,sy);
+  view.ox += (after.x-before.x)*view.scale;
+  view.oy += (after.y-before.y)*view.scale;
+  positionCallout();
+},{passive:false});
+
+/* ---------- TRANSPORT ---------- */
+const playBtn=document.getElementById('playBtn');
+function setPlayBtn(){ playBtn.textContent=clock.playing?'❚❚ PAUSE':'▶ PLAY'; playBtn.classList.toggle('on',clock.playing); }
+function play(){ if(clock.t>=TOTAL_T) restart(); clock.playing=true; clock.lastReal=0; setPlayBtn(); }
+function pause(){ clock.playing=false; setPlayBtn(); }
+function togglePlay(){ clock.playing?pause():play(); }
+playBtn.addEventListener('click',togglePlay);
+document.getElementById('stepBtn').addEventListener('click',()=>{ pause(); stepOnce(); });
+document.getElementById('restartBtn').addEventListener('click',restart);
+
+function restart(){
+  clock.t=0; clock.firedIdx=-1; clock.playing=false; clock.lastReal=0;
+  sim.nodes=[]; sim.edges=[]; sim.byId={}; sim.alpha=0;
+  pinnedNode=null; hoverNode=null; lineagePaths=[]; activeType=null;
+  for(const k in typeOff) delete typeOff[k];
+  document.querySelectorAll('.legchip').forEach(c=>c.classList.remove('off'));
+  clearLog(); hideCallout(); document.getElementById('lineage').style.display='none';
+  setStage(0); updateStats();
+  setPlayBtn();
+  // small delay then auto-play
+  setTimeout(()=>play(), 250);
+}
+
+document.getElementById('speed').addEventListener('input',e=>{
+  clock.speed=parseFloat(e.target.value);
+  document.getElementById('speedV').textContent=clock.speed.toFixed(1)+'×';
+});
+document.getElementById('labelBtn').addEventListener('click',e=>{
+  labelsOn=!labelsOn; e.target.classList.toggle('on',labelsOn);
+});
+
+/* BRIDGE LENS — jump to wave 5, frame the merge */
+document.getElementById('bridgeBtn').addEventListener('click',()=>{
+  pause();
+  const bridgeT = INGEST.find(ev=>ev.src==='transformer').t + 0.2;
+  clock.t=bridgeT;
+  deriveAt(clock.t);
+  // make sure transformer fired
+  // zoom to fit
+  fitView(1.05);
+  // focus the transformer
+  const tn=sim.byId['transformer'];
+  if(tn){ focusNode(tn); }
+});
+
+function fitView(pad=1.1){
+  if(sim.nodes.length===0) return;
+  let minx=1e9,miny=1e9,maxx=-1e9,maxy=-1e9;
+  sim.nodes.forEach(n=>{minx=Math.min(minx,n.x);miny=Math.min(miny,n.y);maxx=Math.max(maxx,n.x);maxy=Math.max(maxy,n.y);});
+  const bw=(maxx-minx)*pad, bh=(maxy-miny)*pad;
+  const r=canvas.getBoundingClientRect();
+  const s=Math.min(r.width/bw, r.height/bh);
+  view.scale=Math.max(0.5,Math.min(2.2,s));
+  view.ox = r.width/2 - ((minx+maxx)/2)*view.scale;
+  view.oy = r.height/2 - ((miny+maxy)/2)*view.scale;
+}
+
+/* ---------- SCRUBBER ---------- */
+const scrub=document.getElementById('scrub');
+let scrubbing=false;
+function syncScrub(){
+  if(scrubbing) return;
+  scrub.value = Math.round(clock.t/TOTAL_T*1000);
+  document.getElementById('clockReadout').textContent='t+'+clock.t.toFixed(1)+'s';
+  updateStats(); updateLegendCounts();
+}
+scrub.addEventListener('input',e=>{
+  scrubbing=true; pause();
+  const t=parseFloat(e.target.value)/1000*TOTAL_T;
+  clock.t=t;
+  deriveAt(t);
+  document.getElementById('clockReadout').textContent='t+'+t.toFixed(1)+'s';
+  updateLegendCounts();
+});
+scrub.addEventListener('change',()=>{ scrubbing=false; });
+// wave tick marks
+function buildTicks(){
+  const wrap=document.getElementById('scrubWrap');
+  for(let w=1;w<=5;w++){
+    const tk=document.createElement('div'); tk.className='tick';
+    tk.style.left=(WAVE_T[w]/TOTAL_T*100)+'%';
+    wrap.appendChild(tk);
+  }
+}
+// click wave labels to jump
+document.querySelectorAll('#waveLabels span').forEach(s=>{
+  s.addEventListener('click',()=>{
+    const w=parseInt(s.dataset.w);
+    pause();
+    const t = w===0?0 : (w>=6?TOTAL_T:WAVE_T[w]+0.05);
+    clock.t=t; deriveAt(t); syncScrubForce();
+  });
+});
+function syncScrubForce(){ scrub.value=Math.round(clock.t/TOTAL_T*1000); document.getElementById('clockReadout').textContent='t+'+clock.t.toFixed(1)+'s'; }
+
+/* ---------- GREP / LOG SEARCH ---------- */
+const grep=document.getElementById('grep');
+grep.addEventListener('input',()=>{
+  const q=grep.value.trim().toLowerCase();
+  pulseSet=new Set();
+  const lines=logEl.querySelectorAll('.logline');
+  lines.forEach(l=>{ l.classList.remove('grepHit','grepDim'); });
+  if(!q){ return; }
+  lines.forEach(l=>{
+    if(l._cursorWrap) return;
+    const txt=l.textContent.toLowerCase();
+    if(txt.includes(q)){ l.classList.add('grepHit'); if(l.dataset.src) pulseSet.add(l.dataset.src); }
+    else l.classList.add('grepDim');
+  });
+  // also match node labels directly
+  sim.nodes.forEach(n=>{ if(n.label.toLowerCase().includes(q)) pulseSet.add(n.id); });
+});
+
+/* ---------- KEYBOARD ---------- */
+window.addEventListener('keydown',e=>{
+  if(e.target===grep){ if(e.key==='Escape'){ grep.blur(); grep.value=''; grep.dispatchEvent(new Event('input')); } return; }
+  if(e.key===' '){ e.preventDefault(); togglePlay(); }
+  else if(e.key==='r'||e.key==='R'){ restart(); }
+  else if(e.key==='/'){ e.preventDefault(); grep.focus(); }
+  else if(e.key==='ArrowRight'){ e.preventDefault(); pause(); jumpWave(+1); }
+  else if(e.key==='ArrowLeft'){ e.preventDefault(); pause(); jumpWave(-1); }
+  else if(e.key==='Escape'){ clearFocus(); }
+});
+function currentWave(){ let w=0; INGEST.forEach((ev,i)=>{ if(i<=clock.firedIdx) w=ev.wave; }); return w; }
+function jumpWave(dir){
+  let w=currentWave()+dir;
+  w=Math.max(0,Math.min(5,w));
+  const t = w===0?0:WAVE_T[w]+0.05;
+  clock.t = (w===5)? TOTAL_T : t;
+  deriveAt(clock.t); syncScrubForce();
+}
+
+/* help panel */
+document.getElementById('helpToggle').addEventListener('click',()=>{
+  const p=document.getElementById('helpPanel');
+  p.style.display = p.style.display==='block'?'none':'block';
+});
+
+/* ---------- COLD BOOT START ---------- */
+document.getElementById('startBtn').addEventListener('click',startCompile);
+document.addEventListener('keydown',function bootKey(e){
+  if(document.getElementById('boot').style.display!=='none' && (e.key==='Enter')){ startCompile(); }
+});
+function startCompile(){
+  document.getElementById('boot').style.display='none';
+  restart();
+}
+
+/* ============================================================
+   7) BOOTSTRAP
+   ============================================================ */
+function init(){
+  resize();
+  buildLegend();
+  buildTicks();
+  clearLog();
+  setStage(0);
+  updateStats();
+  // center view
+  view.scale=1; view.ox=0; view.oy=0;
+  setPlayBtn();
+  requestAnimationFrame(t=>{ clock.lastReal=t; clockStep(t); });
+}
+init();
+
+/* update legend counts each second-ish via render side-effect */
+setInterval(()=>{ updateLegendCounts(); },400);
+</script>
+</body>
+</html>

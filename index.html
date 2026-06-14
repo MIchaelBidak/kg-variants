@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<meta name="theme-color" content="#FBF8F4" />
+<title>KG Variants · Choose a concept</title>
+<style>
+  :root { --clay:#D97757; --clay-dark:#C2603F; --ink:#1A1A18; --bg:#FBF8F4; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased; line-height: 1.5;
+  }
+  .wrap { max-width: 640px; margin: 0 auto; padding: 56px 20px 64px; }
+  .badge {
+    display: inline-flex; align-items: center; gap: 7px;
+    background: rgba(217,119,87,.1); color: var(--clay-dark);
+    font-size: 12px; font-weight: 600; padding: 5px 11px; border-radius: 999px; margin-bottom: 18px;
+  }
+  .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--clay); }
+  h1 { font-size: 34px; letter-spacing: -.02em; margin: 0 0 8px; }
+  .lede { color: #57534e; margin: 0 0 32px; font-size: 16px; }
+  a.card {
+    display: block; text-decoration: none; color: inherit;
+    background: #fff; border: 1px solid #e7e5e4; border-radius: 16px;
+    padding: 20px 22px; margin-bottom: 14px;
+    transition: border-color .18s, box-shadow .18s, transform .18s;
+  }
+  a.card:hover { border-color: rgba(217,119,87,.55); box-shadow: 0 10px 30px -16px rgba(0,0,0,.3); transform: translateY(-2px); }
+  .vlabel { font-family: ui-monospace, Menlo, monospace; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--clay); font-weight: 700; }
+  .vtitle { font-size: 19px; font-weight: 700; margin: 6px 0 4px; letter-spacing: -.01em; }
+  .vsub { color: #78716c; font-size: 14px; }
+  .arrow { float: right; color: var(--clay); font-size: 20px; margin-top: -2px; }
+  footer { margin-top: 36px; padding-top: 20px; border-top: 1px solid #e7e5e4; color: #a8a29e; font-size: 12px; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="badge"><span class="dot"></span> Three concepts · pick one to explore</div>
+    <h1>KG Variants</h1>
+    <p class="lede">Three different takes on a knowledge-graph experience. Open any one — your work is preserved across all three.</p>
+
+    <a class="card" href="variant-1.html">
+      <span class="arrow">↗</span>
+      <div class="vlabel">Variant 1</div>
+      <div class="vtitle">ORBITAL</div>
+      <div class="vsub">The Knowledge Assembly Observatory</div>
+    </a>
+
+    <a class="card" href="variant-2.html">
+      <span class="arrow">↗</span>
+      <div class="vlabel">Variant 2</div>
+      <div class="vtitle">The Stitching of a Science</div>
+      <div class="vsub">How Molecular Biology Was Built from Two Strangers</div>
+    </a>
+
+    <a class="card" href="variant-3.html">
+      <span class="arrow">↗</span>
+      <div class="vlabel">Variant 3</div>
+      <div class="vtitle">SUBSTRATE.idx</div>
+      <div class="vsub">A Live Knowledge-Graph Indexer</div>
+    </a>
+
+    <footer>Direct links: <a href="variant-1.html">/variant-1</a> · <a href="variant-2.html">/variant-2</a> · <a href="variant-3.html">/variant-3</a></footer>
+  </div>
+</body>
+</html>
